@@ -24,6 +24,8 @@ laptop dies you may lose it.
   daily after that) and lets you browse back in time.
 - Reads like Sublime: a **tab bar** on top and the full text below; swipe between tabs. Each
   tab shows when it was **last modified**; sort tabs as in Sublime or most recent first.
+- Remembers where you were: reopening the app goes back to the same tab, or its window if the
+  tab was closed.
 - One-tap **copy the full text** of any tab.
 - **Edit from the phone** with a plain-text editor (Sublime's monospaced font, undo/redo,
   find and replace, auto-indent). Everything you type is saved on the phone at once and sent

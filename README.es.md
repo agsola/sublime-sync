@@ -28,6 +28,8 @@ portátil se estropea puedes perderlo.
 - Se lee como Sublime: **barra de pestañas** arriba y el texto completo debajo; se desliza
   para cambiar de pestaña. Cada pestaña muestra **cuándo se modificó**; el orden puede ser el de
   Sublime o el de la última modificación.
+- Recuerda dónde estabas: al volver a abrir la app vuelve a la misma pestaña, o a su ventana si
+  la pestaña ya no existe.
 - **Copiar el texto completo** de cualquier pestaña con un toque.
 - **Editar desde el móvil** con un editor de texto plano (letra monoespaciada como Sublime,
   deshacer y rehacer, buscar y reemplazar, sangría automática). Todo lo que escribes se guarda

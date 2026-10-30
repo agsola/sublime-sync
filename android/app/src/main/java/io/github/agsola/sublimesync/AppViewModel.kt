@@ -22,6 +22,11 @@ import io.github.agsola.sublimesync.model.ListItem
 import io.github.agsola.sublimesync.model.PairPayload
 import io.github.agsola.sublimesync.security.KeyVault
 import io.github.agsola.sublimesync.settings.Layout
+import kotlinx.coroutines.flow.first
+import io.github.agsola.sublimesync.data.visibleTabs
+import io.github.agsola.sublimesync.settings.resolveNav
+import io.github.agsola.sublimesync.settings.NavStore
+import io.github.agsola.sublimesync.settings.NavState
 import io.github.agsola.sublimesync.settings.SettingsStore
 import io.github.agsola.sublimesync.settings.Sources
 import kotlinx.coroutines.CoroutineScope
@@ -62,6 +67,7 @@ class AppViewModel(private val app: Application) : AndroidViewModel(app) {
 
     fun select(tabId: Long) {
         _selectedTab.value = tabId
+        saveNav()
     }
 
     /** The window shown on the main screen, by Sublime window id. */
@@ -69,7 +75,37 @@ class AppViewModel(private val app: Application) : AndroidViewModel(app) {
     val selectedWindow: StateFlow<Long?> = _selectedWindow.asStateFlow()
 
     fun selectWindow(windowId: Long) {
-        _selectedWindow.value = windowId
+        if (_selectedWindow.value != windowId) {
+            _selectedWindow.value = windowId
+            saveNav()
+        }
+    }
+
+    // --- remembering where the user was -------------------------------------
+
+    private val navStore = NavStore(app)
+    private var restorePending = false
+
+    private fun saveNav() {
+        if (restorePending || _historic.value != null) return // don't overwrite before restoring
+        val tabs = repository?.state?.value?.view?.tabs ?: return
+        val win = _selectedWindow.value ?: return
+        val open = _screen.value is Screen.Tab || settings.settings.value.layout == Layout.WINDOWS_TABS
+        val tab = tabs.firstOrNull { it.id == _selectedTab.value && it.window == win }
+        navStore.save(NavState(win, tabs.firstOrNull { it.window == win }?.windowName ?: "", tab?.uid ?: "", tab?.id, open && tab != null))
+    }
+
+    /** After unlocking: back to the saved tab, else its window, else the start. */
+    private fun restoreNav(tabs: List<io.github.agsola.sublimesync.model.Tab>) {
+        restorePending = false
+        val nav = navStore.load() ?: return
+        val r = resolveNav(nav, visibleTabs(tabs, _phoneState.value))
+        _selectedWindow.value = r.windowId
+        _selectedTab.value = r.tabId
+        if (_screen.value == Screen.Main && r.open && r.tabId != null && settings.settings.value.layout == Layout.WINDOWS_LIST) {
+            _screen.value = Screen.Tab(r.tabId)
+        }
+        saveNav()
     }
 
     /** Opens a tab: in its own screen for the list layout, in place for the tab-bar layout. */
@@ -77,6 +113,7 @@ class AppViewModel(private val app: Application) : AndroidViewModel(app) {
         _selectedTab.value = tabId
         _selectedWindow.value = windowId
         _screen.value = if (settings.settings.value.layout == Layout.WINDOWS_LIST) Screen.Tab(tabId) else Screen.Main
+        saveNav()
     }
 
     private var keyring: Map<String, io.github.agsola.sublimesync.crypto.Keys>? = null
@@ -133,6 +170,7 @@ class AppViewModel(private val app: Application) : AndroidViewModel(app) {
 
     /** Called after a successful fingerprint/PIN prompt. */
     fun unlocked() {
+        restorePending = true
         pendingPair?.let { p ->
             pendingPair = null
             pair(p)
@@ -192,6 +230,7 @@ class AppViewModel(private val app: Application) : AndroidViewModel(app) {
     }
 
     fun unpair() {
+        navStore.clear()
         lock()
         vault.reset()
         cacheDir.deleteRecursively()
@@ -223,6 +262,10 @@ class AppViewModel(private val app: Application) : AndroidViewModel(app) {
         scope.launch {
             repo.loadCache()
             repo.refresh()
+        }
+        if (restorePending) scope.launch {
+            val first = repo.state.first { it.view != null }.view!!
+            restoreNav(first.tabs)
         }
 
         // Editing: drafts and hidden/private flags, saved on the phone and synced.
@@ -372,7 +415,8 @@ class AppViewModel(private val app: Application) : AndroidViewModel(app) {
     }
 
     fun back(): Boolean = when (_screen.value) {
-        Screen.Overview, Screen.History, Screen.Settings, is Screen.Tab, Screen.Drafts -> { _screen.value = Screen.Main; true }
+        is Screen.Tab -> { _screen.value = Screen.Main; saveNav(); true }
+        Screen.Overview, Screen.History, Screen.Settings, Screen.Drafts -> { _screen.value = Screen.Main; true }
         is Screen.Editor -> { leaveEditor((_screen.value as Screen.Editor).draftId); true }
         Screen.Hidden -> { _screen.value = Screen.Settings; true }
         Screen.Pair -> if (repository != null) { _screen.value = Screen.Main; true } else false

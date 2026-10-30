@@ -128,4 +128,5 @@
     <string name="too_large_to_edit">This tab has more than 5 million characters: too big to edit comfortably on the phone. You can read and copy it.</string>
     <string name="truncated_cannot_edit">Only the beginning of this tab reaches the phone (it doesn\'t fit once compressed), so it can\'t be edited here.</string>
     <string name="truncated">This tab is too large to sync whole; only the beginning is shown.</string>
+    <string name="unpair_unsent">%1$d drafts haven\'t reached Sublime yet and will be lost.</string>
 </resources>

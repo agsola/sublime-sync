@@ -90,4 +90,5 @@ lo ejecuta antes de cada commit, y `--history` revisa también los commits anter
 
 ## Licencia
 
-Por decidir.
+[MIT](LICENSE). Las tipografías incluidas (JetBrains Mono, Atkinson Hyperlegible) tienen
+licencia SIL Open Font License; ver `android/fonts-OFL-*.txt`.

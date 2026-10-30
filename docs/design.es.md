@@ -191,7 +191,7 @@ Prioridad: **leer y copiar sin pensar**.
 - **QR**: se muestra bajo demanda (`syncsublime pair`); no hace falta un solo uso. Clave en el
   Llavero como ítem propio del agente.
 - **Tamaños** (desde la 0.2.1): una pestaña solo se recorta si no cabe en el servidor una vez
-  comprimida y cifrada (16 MB por pestaña), con un tope de seguridad de 32 millones de
+  comprimida y cifrada (16 MB por pestaña), con un tope de seguridad de 30 millones de
   caracteres leídos de Sublime. Las recortadas muestran un aviso en la app. Medido en un Pixel 10
   Pro: una pestaña de 32 millones de caracteres abre en ~3,5 s y se desplaza con fluidez; con ~60
   millones de caracteres abiertos la app usa ~380 MB de sus 512 MB, así que una pestaña que no

@@ -188,7 +188,7 @@ Priority: **read and copy without thinking**.
 - **QR**: shown on demand (`syncsublime pair`); single-use not required. Key stored in the
   Keychain as the agent's own item.
 - **Sizes** (since 0.2.1): each tab is cut only if it doesn't fit the relay once compressed and
-  encrypted (16 MB per tab), with a safety cap of 32 million characters read from Sublime. Cut
+  encrypted (16 MB per tab), with a safety cap of 30 million characters read from Sublime. Cut
   tabs show a warning in the app. Measured on a Pixel 10 Pro: a 32-million-character tab opens
   in ~3.5 s and scrolls smoothly; the app uses ~380 MB of its 512 MB with ~60 million characters
   open, so very large tabs that don't fit in memory show a notice instead of crashing.

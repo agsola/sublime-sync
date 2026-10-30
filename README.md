@@ -83,4 +83,5 @@ runs it before every commit, and `--history` also scans past commits.
 
 ## License
 
-To be decided.
+[MIT](LICENSE). The bundled fonts (JetBrains Mono, Atkinson Hyperlegible) are under the
+SIL Open Font License; see `android/fonts-OFL-*.txt`.

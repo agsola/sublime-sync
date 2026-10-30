@@ -144,7 +144,13 @@ fun SettingsScreen(vm: AppViewModel) {
         AlertDialog(
             onDismissRequest = { confirmUnpair = false },
             title = { Text(stringResource(R.string.unpair)) },
-            text = { Text(stringResource(R.string.unpair_hint)) },
+            text = {
+                val unsent = vm.draftList.collectAsState().value.count { it.rev > it.sentRev }
+                Text(
+                    stringResource(R.string.unpair_hint) +
+                        if (unsent > 0) "\n\n" + stringResource(R.string.unpair_unsent, unsent) else "",
+                )
+            },
             confirmButton = { TextButton(onClick = { confirmUnpair = false; vm.unpair() }) { Text(stringResource(R.string.unpair), color = p.red) } },
             dismissButton = { TextButton(onClick = { confirmUnpair = false }) { Text(stringResource(R.string.cancel)) } },
         )

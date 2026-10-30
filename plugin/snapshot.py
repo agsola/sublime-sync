@@ -7,7 +7,7 @@ import threading
 
 # Safety cap on what is read from Sublime; the agent cuts further so each tab
 # fits the relay once compressed.
-MAX_TAB_CHARS = 32 * 1024 * 1024
+MAX_TAB_CHARS = 30 * 1000 * 1000
 TITLE_MAX = 80
 
 

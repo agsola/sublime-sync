@@ -24,6 +24,8 @@ data class Settings(
     val secureScreen: Boolean = false,
     /** Mark copied text as sensitive so Android hides it in the clipboard preview. */
     val sensitiveClipboard: Boolean = false,
+    /** How often edits are sent to the Mac or the server. */
+    val syncSeconds: Int = 10,
 )
 
 /** Display preferences. Not secret, so plain SharedPreferences. */
@@ -42,6 +44,7 @@ class SettingsStore(context: Context) {
             .putString("sources", s.sources.name)
             .putBoolean("secureScreen", s.secureScreen)
             .putBoolean("sensitiveClipboard", s.sensitiveClipboard)
+            .putInt("syncSeconds", s.syncSeconds)
             .apply()
         _settings.value = s
     }
@@ -54,6 +57,7 @@ class SettingsStore(context: Context) {
         sources = enumOr(prefs.getString("sources", null), Sources.BOTH),
         secureScreen = prefs.getBoolean("secureScreen", false),
         sensitiveClipboard = prefs.getBoolean("sensitiveClipboard", false),
+        syncSeconds = prefs.getInt("syncSeconds", 10).coerceIn(SYNC_SECONDS),
     )
 
     private inline fun <reified E : Enum<E>> enumOr(name: String?, def: E): E =
@@ -61,6 +65,7 @@ class SettingsStore(context: Context) {
 
     companion object {
         val TEXT_SIZES = 13..24
+        val SYNC_SECONDS = 5..60
     }
 }
 

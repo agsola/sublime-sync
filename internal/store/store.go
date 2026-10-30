@@ -44,6 +44,15 @@ CREATE TABLE IF NOT EXISTS snapshot_blobs (
 );
 CREATE INDEX IF NOT EXISTS snapshot_blobs_blob ON snapshot_blobs(blob_id);
 CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, val TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS commands (
+	id TEXT PRIMARY KEY,
+	created INTEGER NOT NULL,
+	env BLOB NOT NULL,
+	result BLOB,
+	result_at INTEGER
+);
+CREATE TABLE IF NOT EXISTS state (name TEXT PRIMARY KEY, version INTEGER NOT NULL, env BLOB NOT NULL);
+CREATE TABLE IF NOT EXISTS applied (id TEXT PRIMARY KEY, at INTEGER NOT NULL);
 `
 
 func Open(path string) (*Store, error) {

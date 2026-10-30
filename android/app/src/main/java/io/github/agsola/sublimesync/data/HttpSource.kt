@@ -1,5 +1,6 @@
 package io.github.agsola.sublimesync.data
 
+import io.github.agsola.sublimesync.model.CommandJson
 import io.github.agsola.sublimesync.model.Event
 import io.github.agsola.sublimesync.model.ListItem
 import io.github.agsola.sublimesync.model.SnapshotJson
@@ -16,6 +17,10 @@ import okhttp3.Request
 import okhttp3.Response
 import okhttp3.WebSocket
 import okhttp3.WebSocketListener
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.RequestBody.Companion.toRequestBody
+import kotlinx.serialization.Serializable
+import java.util.Base64
 import java.io.IOException
 import java.net.URI
 import java.util.concurrent.TimeUnit
@@ -26,7 +31,7 @@ import kotlin.coroutines.resumeWithException
  * HTTP client for one source. Plain http is refused unless the host is a
  * Tailscale address (100.64.0.0/10) or a MagicDNS name (*.ts.net).
  */
-class HttpSource(baseUrl: String, private val bearer: String, connectTimeoutMs: Long) : Source {
+class HttpSource(baseUrl: String, private val bearer: String, connectTimeoutMs: Long) : Source, CommandApi {
     private val base = baseUrl.trimEnd('/')
 
     init {
@@ -47,6 +52,54 @@ class HttpSource(baseUrl: String, private val bearer: String, connectTimeoutMs: 
     override suspend fun status(): Status = json.decodeFromString(getString("/v1/status"))
 
     override fun events(): Flow<Event> = reconnecting(1_000, 60_000) { socket() }
+
+    override suspend fun postCommand(id: String, env: ByteArray) {
+        val body = json.encodeToString(CommandJson.serializer(), CommandJson(id, envelope = b64(env)))
+        send(Request.Builder().url("$base/v1/commands").post(body.toRequestBody(JSON))).use {
+            if (it.code != 204) throw HttpStatusException(it.code)
+        }
+    }
+
+    override suspend fun command(id: String): CommandJson? =
+        send(Request.Builder().url("$base/v1/commands/$id")).use { resp ->
+            when (resp.code) {
+                404 -> null
+                200 -> json.decodeFromString(CommandJson.serializer(), resp.body.string())
+                else -> throw HttpStatusException(resp.code)
+            }
+        }
+
+    override suspend fun getState(name: String): StateJson? =
+        send(Request.Builder().url("$base/v1/state/$name")).use { resp ->
+            when (resp.code) {
+                404 -> null
+                200 -> parseState(resp.body.string())
+                else -> throw HttpStatusException(resp.code)
+            }
+        }
+
+    override suspend fun putState(name: String, ifVersion: Long, env: ByteArray): PutResult =
+        send(Request.Builder().url("$base/v1/state/$name").header("If-Match", ifVersion.toString())
+            .put(env.toRequestBody(BYTES))).use { resp ->
+            when (resp.code) {
+                200 -> PutResult.Ok(parseState(resp.body.string()).version)
+                409 -> PutResult.Conflict(parseState(resp.body.string()))
+                else -> throw HttpStatusException(resp.code)
+            }
+        }
+
+    @Serializable
+    private class WireState(val version: Long, val envelope: String? = null)
+
+    private fun parseState(body: String): StateJson {
+        val w = json.decodeFromString(WireState.serializer(), body)
+        return StateJson(w.version, w.envelope?.let { Base64.getDecoder().decode(it) })
+    }
+
+    private fun b64(b: ByteArray) = Base64.getEncoder().encodeToString(b)
+
+    private suspend fun send(b: Request.Builder): Response =
+        client.newCall(b.header("Authorization", "Bearer $bearer").build()).await()
 
     private fun socket(): Flow<Event> = callbackFlow {
         val wsUrl = base.replaceFirst("http", "ws") + "/v1/ws?role=phone"
@@ -74,6 +127,9 @@ class HttpSource(baseUrl: String, private val bearer: String, connectTimeoutMs: 
     private fun request(url: String) = Request.Builder().url(url).header("Authorization", "Bearer $bearer").build()
 
     companion object {
+        private val JSON = "application/json".toMediaType()
+        private val BYTES = "application/octet-stream".toMediaType()
+
         fun isAllowedUrl(url: String): Boolean {
             val uri = runCatching { URI(url) }.getOrNull() ?: return false
             return when (uri.scheme) {

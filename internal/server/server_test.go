@@ -221,3 +221,93 @@ func TestMacOfflineAfterHeartbeatTimeout(t *testing.T) {
 		t.Fatal("still online")
 	}
 }
+
+func postJSON(t *testing.T, f *fixture, method, path string, v any, hdr map[string]string) *http.Response {
+	t.Helper()
+	b, _ := json.Marshal(v)
+	return f.do(t, method, path, f.token, hdr, b)
+}
+
+func TestPostCommandNotifiesMac(t *testing.T) {
+	f := newFixture(t, time.Minute)
+	f.register(t)
+	mac := dialWS(t, f, "mac")
+	if r := postJSON(t, f, "POST", "/v1/commands", api.CommandJSON{ID: "c1", Envelope: []byte("sealed")}, nil); r.StatusCode != 204 {
+		t.Fatalf("post: %d", r.StatusCode)
+	}
+	if e := readEvent(t, mac); e.Type != "command" {
+		t.Fatalf("%+v", e)
+	}
+	r := f.do(t, "GET", "/v1/commands?pending=1", f.token, nil, nil)
+	var pending []api.CommandJSON
+	json.NewDecoder(r.Body).Decode(&pending)
+	if len(pending) != 1 || pending[0].ID != "c1" || string(pending[0].Envelope) != "sealed" {
+		t.Fatalf("%+v", pending)
+	}
+}
+
+func TestResultNotifiesPhone(t *testing.T) {
+	f := newFixture(t, time.Minute)
+	f.register(t)
+	postJSON(t, f, "POST", "/v1/commands", api.CommandJSON{ID: "c2", Envelope: []byte("sealed")}, nil)
+	phone := dialWS(t, f, "phone")
+	readEvent(t, phone) // presence
+	if r := f.do(t, "PUT", "/v1/commands/c2/result", f.token, nil, []byte("res")); r.StatusCode != 204 {
+		t.Fatalf("put result: %d", r.StatusCode)
+	}
+	e := readEvent(t, phone)
+	for e.Type == "presence" { // posting a result also marks the Mac online
+		e = readEvent(t, phone)
+	}
+	if e.Type != "result" || e.ID != "c2" {
+		t.Fatalf("%+v", e)
+	}
+	r := f.do(t, "GET", "/v1/commands/c2", f.token, nil, nil)
+	var c api.CommandJSON
+	json.NewDecoder(r.Body).Decode(&c)
+	if string(c.Result) != "res" {
+		t.Fatalf("%+v", c)
+	}
+}
+
+func TestStatePutConflict409(t *testing.T) {
+	f := newFixture(t, time.Minute)
+	f.register(t)
+	if r := f.do(t, "GET", "/v1/state/phone-state", f.token, nil, nil); r.StatusCode != 404 {
+		t.Fatalf("get missing: %d", r.StatusCode)
+	}
+	if r := f.do(t, "PUT", "/v1/state/phone-state", f.token, map[string]string{"If-Match": "0"}, []byte("a")); r.StatusCode != 200 {
+		t.Fatalf("create: %d", r.StatusCode)
+	}
+	r := f.do(t, "PUT", "/v1/state/phone-state", f.token, map[string]string{"If-Match": "0"}, []byte("b"))
+	if r.StatusCode != 409 {
+		t.Fatalf("stale: %d", r.StatusCode)
+	}
+	var cur api.StateJSON
+	json.NewDecoder(r.Body).Decode(&cur)
+	if cur.Version != 1 || string(cur.Envelope) != "a" {
+		t.Fatalf("409 body %+v", cur)
+	}
+}
+
+func TestCommandBodyLimit(t *testing.T) {
+	f := newFixture(t, time.Minute)
+	f.register(t)
+	big := api.CommandJSON{ID: "big", Envelope: make([]byte, 5<<20)}
+	if r := postJSON(t, f, "POST", "/v1/commands", big, nil); r.StatusCode != 413 {
+		t.Fatalf("%d", r.StatusCode)
+	}
+}
+
+func TestNewRoutesNeedAuth(t *testing.T) {
+	f := newFixture(t, time.Minute)
+	f.register(t)
+	for _, p := range []struct{ m, path string }{
+		{"POST", "/v1/commands"}, {"GET", "/v1/commands/x"}, {"GET", "/v1/commands?pending=1"},
+		{"PUT", "/v1/commands/x/result"}, {"GET", "/v1/state/p"}, {"PUT", "/v1/state/p"},
+	} {
+		if r := f.do(t, p.m, p.path, "bad", nil, nil); r.StatusCode != 401 {
+			t.Errorf("%s %s: %d", p.m, p.path, r.StatusCode)
+		}
+	}
+}

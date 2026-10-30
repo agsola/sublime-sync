@@ -20,6 +20,10 @@ data class Tab(
     val truncated: Boolean = false,
     /** When the text last changed (unix ms); 0 if unknown. */
     val modified: Long = 0,
+    /** Stable id kept in Sublime's view settings; empty from old agents. */
+    val uid: String = "",
+    /** The phone draft this "✎" tab shows, if any. */
+    val draft: String = "",
 )
 
 @Serializable
@@ -70,3 +74,37 @@ data class PairPayload(
         }
     }
 }
+
+/** Phone → Mac command (sealed with AAD "command:<id>"). */
+@Serializable
+data class Command(
+    val id: String,
+    val type: String,
+    val created: Long,
+    val draftId: String? = null,
+    val sourceUid: String? = null,
+    val title: String? = null,
+    val text: String? = null,
+    val rev: Long = 0,
+    val uid: String? = null,
+)
+
+/** Mac → phone answer (sealed with AAD "result:<id>"). */
+@Serializable
+data class Result(
+    val id: String,
+    val status: String,
+    val reason: String = "",
+    val uid: String = "",
+    val at: Long = 0,
+)
+
+@Serializable
+data class CommandJson(val id: String, val created: Long = 0, val envelope: String? = null, val result: String? = null)
+
+/** Hidden/private flags per tab uid; merged newest-`at`-wins. */
+@Serializable
+data class PhoneState(val entries: Map<String, PhoneEntry> = emptyMap())
+
+@Serializable
+data class PhoneEntry(val hidden: Boolean = false, val private: Boolean = false, val at: Long = 0)

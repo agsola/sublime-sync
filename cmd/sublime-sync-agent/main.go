@@ -207,7 +207,7 @@ func cmdRun() error {
 	if err != nil {
 		return fmt.Errorf("not initialised: %w", err)
 	}
-	keys, _, err := agent.Keyring(cfg)
+	keys, keyring, err := agent.Keyring(cfg)
 	if err != nil {
 		return err
 	}
@@ -240,6 +240,23 @@ func cmdRun() error {
 			resync(latest)
 		}
 	}
+	// Phone commands: from the relay (fetched) or straight over Tailscale.
+	inbox := agent.NewInbox(st, keys, keyring, time.Now)
+	fetcher := agent.NewCommandFetcher(inbox, cfg.Server, proto.TokenString(keys.ServerAuth))
+	inbox.OnResult = func(id string, env []byte, fromServer bool) {
+		hub.NotifyResult(id)
+		go fetcher.UploadResult(id, env, fromServer)
+	}
+	if err := inbox.Load(); err != nil {
+		log.Printf("commands: load: %v", err)
+	}
+	up.OnEvent = func(e api.Event) {
+		if e.Type == "command" {
+			fetcher.Kick()
+		}
+	}
+	go fetcher.Run(ctx, 30*time.Second)
+
 	var lastPlugin atomic.Int64
 	ingest := func(source string) func([]proto.Tab) {
 		return func(tabs []proto.Tab) {
@@ -256,7 +273,8 @@ func cmdRun() error {
 
 	go up.Run(ctx)
 	go func() {
-		if err := agent.ListenPlugin(ctx, filepath.Join(dir, "agent.sock"), ingest(proto.SourcePlugin)); err != nil {
+		h := pluginHandler{onTabs: ingest(proto.SourcePlugin), inbox: inbox}
+		if err := agent.ListenPlugin(ctx, filepath.Join(dir, "agent.sock"), h); err != nil {
 			log.Printf("plugin socket: %v", err)
 			stop()
 		}
@@ -268,7 +286,9 @@ func cmdRun() error {
 
 	mux := http.NewServeMux()
 	macHash := proto.TokenHash(keys.MacAuth)
-	api.ReadRoutes(mux, st, api.BearerAuth(func() string { return macHash }), hub)
+	macAuth := api.BearerAuth(func() string { return macHash })
+	api.ReadRoutes(mux, st, macAuth, hub)
+	api.WriteRoutes(mux, st, macAuth, hub, func(id string, env []byte) { inbox.Accept(id, env, false) })
 	go agent.ServeTailnet(ctx, mux, phonePort, 30*time.Second)
 
 	go func() {
@@ -278,6 +298,7 @@ func cmdRun() error {
 				return
 			case <-time.After(time.Hour):
 			}
+			st.PruneCommands(time.Now())
 			if _, _, err := st.Prune(time.Now()); err != nil {
 				log.Printf("prune: %v", err)
 			}
@@ -329,3 +350,17 @@ func cmdStatus() error {
 	fmt.Printf("Server snapshot: %d, Mac online: %v\n", s.LatestSeq, s.MacOnline)
 	return nil
 }
+
+// pluginHandler connects the plugin socket to the snapshotter and the inbox.
+type pluginHandler struct {
+	onTabs func([]proto.Tab)
+	inbox  *agent.Inbox
+}
+
+func (h pluginHandler) OnTabs(t []proto.Tab) { h.onTabs(t) }
+func (h pluginHandler) OnResults(rs []proto.Result) {
+	for _, r := range rs {
+		h.inbox.Complete(r)
+	}
+}
+func (h pluginHandler) Pending() []proto.Command { return h.inbox.Pending() }

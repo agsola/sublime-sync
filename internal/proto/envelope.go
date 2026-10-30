@@ -17,9 +17,12 @@ import (
 
 const (
 	envelopeVersion = 0x01
-	nonceSize       = 12
-	headerSize      = 1 + 4 + nonceSize
-	brotliQuality   = 5
+	// envelopeRaw is the same layout without Brotli, used by the phone, which
+	// can decompress Brotli but not compress it.
+	envelopeRaw   = 0x02
+	nonceSize     = 12
+	headerSize    = 1 + 4 + nonceSize
+	brotliQuality = 5
 	// MaxPlaintext bounds decompression so a bad envelope can't exhaust memory.
 	MaxPlaintext = 64 << 20
 )
@@ -41,10 +44,6 @@ func Seal(k Keys, aad string, plaintext []byte) ([]byte, error) {
 }
 
 func sealWithNonce(k Keys, aad string, plaintext []byte, nonce [nonceSize]byte) ([]byte, error) {
-	id, err := hex.DecodeString(k.ID)
-	if err != nil || len(id) != 4 {
-		return nil, errors.New("proto: bad key id")
-	}
 	var buf bytes.Buffer
 	w := brotli.NewWriterLevel(&buf, brotliQuality)
 	if _, err := w.Write(plaintext); err != nil {
@@ -53,20 +52,38 @@ func sealWithNonce(k Keys, aad string, plaintext []byte, nonce [nonceSize]byte) 
 	if err := w.Close(); err != nil {
 		return nil, err
 	}
+	return seal(k, envelopeVersion, aad, buf.Bytes(), nonce)
+}
+
+// SealRaw encrypts without compression (envelope version 2), as the phone does.
+func SealRaw(k Keys, aad string, plaintext []byte) ([]byte, error) {
+	var nonce [nonceSize]byte
+	if _, err := rand.Read(nonce[:]); err != nil {
+		return nil, err
+	}
+	return seal(k, envelopeRaw, aad, plaintext, nonce)
+}
+
+func seal(k Keys, version byte, aad string, payload []byte, nonce [nonceSize]byte) ([]byte, error) {
+	id, err := hex.DecodeString(k.ID)
+	if err != nil || len(id) != 4 {
+		return nil, errors.New("proto: bad key id")
+	}
 	gcm, err := newGCM(k.Content)
 	if err != nil {
 		return nil, err
 	}
-	out := make([]byte, 0, headerSize+buf.Len()+gcm.Overhead())
-	out = append(out, envelopeVersion)
+	out := make([]byte, 0, headerSize+len(payload)+gcm.Overhead())
+	out = append(out, version)
 	out = append(out, id...)
 	out = append(out, nonce[:]...)
-	return gcm.Seal(out, nonce[:], buf.Bytes(), []byte(aad)), nil
+	return gcm.Seal(out, nonce[:], payload, []byte(aad)), nil
 }
 
-// Open decrypts an envelope with whichever key in keyring matches its key id.
+// Open decrypts an envelope (version 1 or 2) with whichever key in keyring
+// matches its key id.
 func Open(keyring map[string]Keys, aad string, env []byte) ([]byte, error) {
-	if len(env) < headerSize || env[0] != envelopeVersion {
+	if len(env) < headerSize || (env[0] != envelopeVersion && env[0] != envelopeRaw) {
 		return nil, ErrFormat
 	}
 	k, ok := keyring[hex.EncodeToString(env[1:5])]
@@ -81,6 +98,12 @@ func Open(keyring map[string]Keys, aad string, env []byte) ([]byte, error) {
 	if err != nil {
 		return nil, ErrAuth
 	}
+	if env[0] == envelopeRaw {
+		if len(compressed) > MaxPlaintext {
+			return nil, ErrFormat
+		}
+		return compressed, nil
+	}
 	plain, err := io.ReadAll(io.LimitReader(brotli.NewReader(bytes.NewReader(compressed)), MaxPlaintext+1))
 	if err != nil {
 		return nil, ErrFormat
@@ -93,7 +116,7 @@ func Open(keyring map[string]Keys, aad string, env []byte) ([]byte, error) {
 
 // EnvelopeKeyID returns the key id an envelope was sealed with.
 func EnvelopeKeyID(env []byte) (string, error) {
-	if len(env) < headerSize || env[0] != envelopeVersion {
+	if len(env) < headerSize || (env[0] != envelopeVersion && env[0] != envelopeRaw) {
 		return "", ErrFormat
 	}
 	return hex.EncodeToString(env[1:5]), nil
@@ -109,6 +132,9 @@ func BlobID(k Keys, plaintext []byte) string {
 
 func BlobAAD(id string) string     { return "blob:" + id }
 func ManifestAAD(seq int64) string { return "manifest:" + strconv.FormatInt(seq, 10) }
+func CommandAAD(id string) string  { return "command:" + id }
+func ResultAAD(id string) string   { return "result:" + id }
+func StateAAD(name string) string  { return "state:" + name }
 
 func newGCM(key [32]byte) (cipher.AEAD, error) {
 	block, err := aes.NewCipher(key[:])

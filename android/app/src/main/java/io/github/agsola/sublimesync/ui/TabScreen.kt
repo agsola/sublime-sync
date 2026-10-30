@@ -16,9 +16,11 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import io.github.agsola.sublimesync.AppViewModel
 import io.github.agsola.sublimesync.R
 import io.github.agsola.sublimesync.data.RepoState
+import io.github.agsola.sublimesync.data.isPrivate
 import io.github.agsola.sublimesync.settings.windows
 import io.github.agsola.sublimesync.ui.theme.LocalPalette
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -33,6 +35,7 @@ fun TabScreen(vm: AppViewModel) {
     val settings by vm.settings.settings.collectAsState()
     val selected by vm.selectedTab.collectAsState()
     val selectedWindow by vm.selectedWindow.collectAsState()
+    val phoneState by vm.phoneState.collectAsState()
     val window = remember(historic, repoState.view, settings.sort, selectedWindow) {
         (historic ?: repoState.view)?.tabs.orEmpty().windows(settings.sort).firstOrNull { it.id == selectedWindow }
     }
@@ -46,11 +49,18 @@ fun TabScreen(vm: AppViewModel) {
     val snackbar = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     val ctx = LocalContext.current
+    val actions = rememberTabActions(vm, snackbar, phoneState)
 
     Scaffold(
         containerColor = p.editor,
         snackbarHost = { SnackbarHost(snackbar) },
-        topBar = { BackBar(current?.title ?: "", onBack = { vm.back() }) },
+        topBar = {
+            BackBar(current?.let { displayTitle(it) } ?: "", onBack = { vm.back() }) {
+                if (current != null) {
+                    TabMenu(current, isPrivate(current, phoneState), actions)
+                }
+            }
+        },
         bottomBar = {
             if (current != null) BottomInfo(
                 tab = current, finding = finding, find = find, onFind = { find = it },
@@ -59,6 +69,7 @@ fun TabScreen(vm: AppViewModel) {
                     copyText(ctx, current.title, current.text, settings.sensitiveClipboard)
                     scope.launch { snackbar.showSnackbar(ctx.getString(R.string.copied, current.text.length)) }
                 },
+                onEdit = { vm.edit(current) },
             )
         },
     ) { pad ->

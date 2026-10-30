@@ -6,7 +6,7 @@ Lee desde tu **móvil Android** todas las pestañas que tienes abiertas en **Sub
 (también las no guardadas), de forma segura y desde cualquier sitio. Con un histórico tipo
 Time Machine como copia de seguridad.
 
-> **Estado:** v0.1 — primera versión usable. Instalación: [docs/install.es.md](docs/install.es.md).
+> **Estado:** v0.2 — lectura y edición. Instalación: [docs/install.es.md](docs/install.es.md).
 
 ## El problema
 
@@ -29,8 +29,13 @@ portátil se estropea puedes perderlo.
   para cambiar de pestaña. Cada pestaña muestra **cuándo se modificó**; el orden puede ser el de
   Sublime o el de la última modificación.
 - **Copiar el texto completo** de cualquier pestaña con un toque.
-- Por ahora solo lectura. En el futuro: lo editado en el móvil se abrirá como pestaña *nueva*
-  en Sublime, sin tocar la original.
+- **Editar desde el móvil** con un editor de texto plano (letra monoespaciada como Sublime,
+  deshacer y rehacer, buscar y reemplazar, sangría automática). Todo lo que escribes se guarda
+  al momento en el móvil y se envía cada pocos segundos; en Sublime aparece como una pestaña
+  nueva "✎ título", sin tocar la original. Si esa pestaña cambió en el Mac entretanto, se abre
+  una copia numerada.
+- Crear pestañas nuevas, ocultar pestañas (con deshacer), marcarlas como privadas (con puntos
+  en las listas) y cerrarlas en Sublime cuando no se pierde nada.
 
 ## Modelo de seguridad
 
@@ -69,7 +74,7 @@ Sublime Text ──(plugin)──► agente macOS ──(Tailscale)──► app
 
 ## Documentación
 
-- Diseño: [docs/design.es.md](docs/design.es.md) · [docs/design.md](docs/design.md)
+- Diseño: [docs/design.es.md](docs/design.es.md) · [docs/design.md](docs/design.md); edición (v0.2): [docs/design-v0.2.es.md](docs/design-v0.2.es.md) · [docs/design-v0.2.md](docs/design-v0.2.md)
 - Instalación: [docs/install.es.md](docs/install.es.md) · [docs/install.md](docs/install.md)
 - Limpiar después de compilar: [docs/cleanup.es.md](docs/cleanup.es.md) · [docs/cleanup.md](docs/cleanup.md)
 

@@ -89,6 +89,7 @@ type vectors struct {
 	AAD        string `json:"aad"`
 	BlobID     string `json:"blobId"`
 	Envelope   string `json:"envelope"`
+	EnvelopeV2 string `json:"envelopeV2"`
 }
 
 func vectorMaster() MasterKey {
@@ -122,6 +123,11 @@ func TestWriteVectors(t *testing.T) {
 		Plaintext: plain, AAD: "blob:abc", BlobID: BlobID(k, []byte(plain)),
 		Envelope: base64.StdEncoding.EncodeToString(env),
 	}
+	v2, err := seal(k, envelopeRaw, "blob:abc", []byte(plain), nonce)
+	if err != nil {
+		t.Fatal(err)
+	}
+	v.EnvelopeV2 = base64.StdEncoding.EncodeToString(v2)
 	b, _ := json.MarshalIndent(v, "", "  ")
 	if err := os.WriteFile("testdata/vectors.json", append(b, '\n'), 0o644); err != nil {
 		t.Fatal(err)
@@ -146,7 +152,52 @@ func TestVectorsStillValid(t *testing.T) {
 	if err != nil || string(got) != v.Plaintext {
 		t.Fatalf("got %q %v", got, err)
 	}
+	v2, _ := base64.StdEncoding.DecodeString(v.EnvelopeV2)
+	if got, err := Open(map[string]Keys{k.ID: k}, v.AAD, v2); err != nil || string(got) != v.Plaintext {
+		t.Fatalf("v2 vector: %q %v", got, err)
+	}
 	if BlobID(k, []byte(v.Plaintext)) != v.BlobID {
 		t.Fatal("blob id changed")
+	}
+}
+
+func TestOpenV2Raw(t *testing.T) {
+	k := testKeys(t)
+	env, err := SealRaw(k, "command:x", []byte("hola ✎"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if env[0] != 0x02 {
+		t.Fatalf("version %d", env[0])
+	}
+	got, err := Open(map[string]Keys{k.ID: k}, "command:x", env)
+	if err != nil || string(got) != "hola ✎" {
+		t.Fatalf("got %q %v", got, err)
+	}
+}
+
+func TestV2NotDecompressed(t *testing.T) {
+	k := testKeys(t)
+	v1, _ := Seal(k, "a", []byte("compressed?"))
+	// A v2 envelope whose plaintext happens to be Brotli bytes must come back verbatim.
+	raw := v1[headerSize:]
+	env, _ := SealRaw(k, "a", raw)
+	got, err := Open(map[string]Keys{k.ID: k}, "a", env)
+	if err != nil || !bytes.Equal(got, raw) {
+		t.Fatalf("v2 was transformed: %v", err)
+	}
+}
+
+func TestCommandJSONShape(t *testing.T) {
+	b, _ := json.Marshal(Command{ID: "i", Type: CommandDraft, DraftID: "d", Rev: 3})
+	var m map[string]any
+	json.Unmarshal(b, &m)
+	for _, k := range []string{"id", "type", "draftId", "rev"} {
+		if _, ok := m[k]; !ok {
+			t.Fatalf("missing %s in %s", k, b)
+		}
+	}
+	if CommandAAD("i") != "command:i" || ResultAAD("i") != "result:i" || StateAAD("s") != "state:s" {
+		t.Fatal("aad strings")
 	}
 }

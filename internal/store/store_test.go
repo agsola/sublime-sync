@@ -114,7 +114,8 @@ func TestPruneTimeMachine(t *testing.T) {
 
 func TestPruneGCsUnreferencedBlobs(t *testing.T) {
 	s := openTest(t)
-	now := time.Now()
+	// Fixed time: both snapshots must fall in the same 5-minute bucket.
+	now := time.Date(2026, 10, 30, 12, 4, 0, 0, time.UTC)
 	add(t, s, 1, now.Add(-time.Minute*2).UnixMilli(), true, "old")
 	add(t, s, 2, now.Add(-time.Minute).UnixMilli(), true, "new")
 	_, blobs, err := s.Prune(now)

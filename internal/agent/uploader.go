@@ -29,6 +29,9 @@ type Uploader struct {
 	// (e.g. the local database was lost), with the server's latest seq.
 	OnStale func(serverLatest int64)
 
+	// OnEvent receives events the relay pushes to the Mac (e.g. "command").
+	OnEvent func(api.Event)
+
 	// Tunables, overridden in tests.
 	minBackoff, maxBackoff, heartbeat, poll time.Duration
 }
@@ -211,7 +214,21 @@ func (u *Uploader) presenceOnce(ctx context.Context, wsURL string) error {
 	defer c.CloseNow()
 	// Coming back online is a good moment to flush anything queued.
 	u.Kick()
-	ctx = c.CloseRead(ctx)
+	ctx, cancel = context.WithCancel(ctx)
+	defer cancel()
+	go func() { // also keeps control frames (pings) flowing
+		defer cancel()
+		for {
+			_, data, err := c.Read(ctx)
+			if err != nil {
+				return
+			}
+			var e api.Event
+			if json.Unmarshal(data, &e) == nil && u.OnEvent != nil {
+				u.OnEvent(e)
+			}
+		}
+	}()
 	hb, _ := json.Marshal(api.Event{Type: "heartbeat"})
 	t := time.NewTicker(u.heartbeat)
 	defer t.Stop()

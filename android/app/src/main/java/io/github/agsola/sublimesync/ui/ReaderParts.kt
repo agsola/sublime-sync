@@ -76,7 +76,7 @@ import kotlinx.coroutines.launch
 
 /** Sublime-like strip: the selected tab merges into the text area below. */
 @Composable
-internal fun TabStrip(tabs: List<Tab>, selected: Int, onSelect: (Int) -> Unit) {
+internal fun TabStrip(tabs: List<Tab>, selected: Int, title: (Tab) -> String = { it.title }, onSelect: (Int) -> Unit) {
     val p = LocalPalette.current
     val state = rememberLazyListState()
     LaunchedEffect(selected) { state.animateScrollToItem((selected - 1).coerceAtLeast(0)) }
@@ -102,7 +102,7 @@ internal fun TabStrip(tabs: List<Tab>, selected: Int, onSelect: (Int) -> Unit) {
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Text(
-                        tab.title, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                        title(tab), maxLines = 1, overflow = TextOverflow.Ellipsis,
                         style = MaterialTheme.typography.labelLarge.copy(fontWeight = if (isSel) FontWeight.Bold else FontWeight.Normal),
                         color = if (isSel) p.text else p.dim,
                         modifier = Modifier.weight(1f, fill = false),
@@ -167,6 +167,7 @@ internal fun BottomInfo(
     onFind: (String) -> Unit,
     onToggleFind: () -> Unit,
     onCopy: () -> Unit,
+    onEdit: (() -> Unit)? = null,
 ) {
     val p = LocalPalette.current
     Column(Modifier.fillMaxWidth().background(p.chrome).navigationBarsPadding()) {
@@ -205,6 +206,7 @@ internal fun BottomInfo(
                 )
             }
             BarIcon(R.drawable.ic_search, stringResource(R.string.find), onToggleFind)
+            if (onEdit != null) BarIcon(R.drawable.ic_edit, stringResource(R.string.edit), onEdit)
             Button(
                 onClick = onCopy,
                 colors = ButtonDefaults.buttonColors(containerColor = p.blue, contentColor = p.editor),

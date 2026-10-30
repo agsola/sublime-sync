@@ -3,6 +3,7 @@ package io.github.agsola.sublimesync.ui
 import android.content.ClipData
 import io.github.agsola.sublimesync.ui.theme.JetBrainsMono
 import io.github.agsola.sublimesync.model.Tab
+import io.github.agsola.sublimesync.data.MASK
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.TextStyle
@@ -145,12 +146,16 @@ fun previewOf(text: String, lines: Int): String =
     text.take(2_000).lineSequence().map { it.trimEnd() }.dropWhile { it.isBlank() }.take(lines).joinToString("\n")
 
 @Composable
-fun TabListRow(tab: Tab, onOpen: () -> Unit, onCopy: () -> Unit) {
+fun TabListRow(tab: Tab, private: Boolean, onOpen: () -> Unit, onCopy: () -> Unit, actions: TabActions?) {
     val p = LocalPalette.current
-    Row(Modifier.fillMaxWidth().clickable(onClick = onOpen).padding(start = 20.dp, end = 4.dp, top = 12.dp, bottom = 12.dp)) {
+    Row(Modifier.fillMaxWidth().clickable(onClick = onOpen).padding(start = 20.dp, end = 0.dp, top = 12.dp, bottom = 12.dp)) {
         Column(Modifier.weight(1f)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(tab.title, style = MaterialTheme.typography.titleMedium, color = p.text, maxLines = 1,
+                if (private) {
+                    Icon(painterResource(R.drawable.ic_lock), null, tint = p.dim, modifier = Modifier.size(15.dp))
+                    Spacer(Modifier.width(6.dp))
+                }
+                Text(if (private) MASK else displayTitle(tab), style = MaterialTheme.typography.titleMedium, color = p.text, maxLines = 1,
                     overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
                 if (tab.dirty) {
                     Spacer(Modifier.width(8.dp))
@@ -160,12 +165,28 @@ fun TabListRow(tab: Tab, onOpen: () -> Unit, onCopy: () -> Unit) {
                 Text(relative(tab.modified), style = MaterialTheme.typography.labelSmall, color = p.dim)
             }
             Spacer(Modifier.height(4.dp))
-            val preview = remember(tab.text) { previewOf(tab.text, 2) }
+            val preview = remember(tab.text, tab.title, private) { if (private) "$MASK $MASK $MASK" else previewAfterTitle(tab.text, displayTitle(tab), 2) }
             Text(
                 preview, maxLines = 2, overflow = TextOverflow.Ellipsis, color = p.dim,
                 style = TextStyle(fontFamily = JetBrainsMono, fontSize = 13.sp, lineHeight = 19.sp),
             )
         }
         BarIcon(R.drawable.ic_copy, stringResource(R.string.copy), onCopy)
+        if (actions != null) TabMenu(tab, private, actions)
     }
+}
+
+/** Preview lines, skipping the first one when it is already shown as the title. */
+fun previewAfterTitle(text: String, title: String, lines: Int): String {
+    // Lines with no letters or digits (separators like "-----") are decoration.
+    val all = text.take(2_000).lineSequence().map { it.trimEnd() }.filter { l -> l.any { it.isLetterOrDigit() } }.toList()
+    val rest = if (title.isNotBlank() && all.firstOrNull()?.trim()?.startsWith(title.trim()) == true) all.drop(1) else all
+    return rest.take(lines).joinToString("\n")
+}
+
+/** A readable title: Sublime uses the first line, which may be only dashes. */
+fun displayTitle(tab: Tab): String {
+    if (tab.title.any { it.isLetterOrDigit() }) return tab.title
+    return tab.text.take(2_000).lineSequence().map { it.trim() }.firstOrNull { l -> l.any { it.isLetterOrDigit() } }?.take(80)
+        ?: tab.title.ifBlank { "untitled" }
 }

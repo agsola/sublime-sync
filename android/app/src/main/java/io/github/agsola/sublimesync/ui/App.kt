@@ -48,6 +48,9 @@ fun App(vm: AppViewModel, onUnlock: () -> Unit, canAuthenticate: Boolean) {
                 Screen.Overview -> OverviewScreen(vm)
                 Screen.History -> HistoryScreen(vm)
                 Screen.Settings -> SettingsScreen(vm)
+                is Screen.Editor -> EditorScreen(vm, (screen as Screen.Editor).draftId)
+                Screen.Drafts -> DraftsScreen(vm)
+                Screen.Hidden -> HiddenScreen(vm)
             }
         }
     }

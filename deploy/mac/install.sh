@@ -19,7 +19,7 @@ echo "Building agent..."
 
 echo "Installing Sublime plugin into $pkg"
 mkdir -p "$pkg"
-cp "$root/plugin/sublime_sync.py" "$root/plugin/snapshot.py" "$pkg/"
+cp "$root/plugin/sublime_sync.py" "$root/plugin/snapshot.py" "$root/plugin/commands.py" "$pkg/"
 
 sed -e "s|__BIN__|$bin|g" -e "s|__LOG__|$data/agent.log|g" \
   "$root/deploy/mac/$label.plist" >"$plist"

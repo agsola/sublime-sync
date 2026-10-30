@@ -45,6 +45,8 @@ import androidx.compose.ui.unit.sp
 import io.github.agsola.sublimesync.AppViewModel
 import io.github.agsola.sublimesync.R
 import io.github.agsola.sublimesync.data.RepoState
+import io.github.agsola.sublimesync.data.isPrivate
+import io.github.agsola.sublimesync.data.visibleTabs
 import io.github.agsola.sublimesync.model.Tab
 import io.github.agsola.sublimesync.settings.SortOrder
 import io.github.agsola.sublimesync.settings.sortedFor
@@ -60,13 +62,15 @@ fun OverviewScreen(vm: AppViewModel) {
     val repoState by (vm.repository?.state ?: remember { MutableStateFlow(RepoState()) }).collectAsState()
     val historic by vm.historic.collectAsState()
     val settings by vm.settings.settings.collectAsState()
+    val phoneState by vm.phoneState.collectAsState()
     var query by remember { mutableStateOf("") }
     val focus = remember { FocusRequester() }
     val snackbar = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     val ctx = LocalContext.current
-    val tabs = remember(historic, repoState.view, settings.sort, query) {
-        (historic ?: repoState.view)?.tabs.orEmpty().sortedFor(settings.sort).filter {
+    val actions = rememberTabActions(vm, snackbar, phoneState)
+    val tabs = remember(historic, repoState.view, settings.sort, query, phoneState) {
+        visibleTabs((historic ?: repoState.view)?.tabs.orEmpty(), phoneState).sortedFor(settings.sort).filter {
             query.isBlank() || it.title.contains(query, true) || it.text.contains(query, true)
         }
     }
@@ -107,7 +111,7 @@ fun OverviewScreen(vm: AppViewModel) {
                             modifier = Modifier.padding(start = 20.dp, top = 20.dp, bottom = 4.dp),
                         )
                     }
-                    TabListRow(tab, onOpen = { vm.openTab(tab.id, tab.window) }, onCopy = {
+                    TabListRow(tab, isPrivate(tab, phoneState), actions = actions, onOpen = { vm.openTab(tab.id, tab.window) }, onCopy = {
                         copyText(ctx, tab.title, tab.text, settings.sensitiveClipboard)
                         scope.launch { snackbar.showSnackbar(ctx.getString(R.string.copied, tab.text.length)) }
                     })

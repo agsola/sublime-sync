@@ -37,6 +37,9 @@ func main() {
 	go hub.Run(ctx)
 	go func() {
 		for {
+			if n, err := st.PruneCommands(time.Now()); err == nil && n > 0 {
+				log.Printf("prune: removed %d old commands", n)
+			}
 			if n, b, err := st.Prune(time.Now()); err != nil {
 				log.Printf("prune: %v", err)
 			} else if n+b > 0 {

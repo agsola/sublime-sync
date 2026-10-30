@@ -5,7 +5,7 @@
 Read every tab you have open in **Sublime Text** — including unsaved ones — from your
 **Android phone**, securely, from anywhere. With a Time Machine–style history as a backup.
 
-> **Status:** v0.1 — first usable version. Install: [docs/install.md](docs/install.md).
+> **Status:** v0.2 — reading and editing. Install: [docs/install.md](docs/install.md).
 
 ## The problem
 
@@ -25,8 +25,12 @@ laptop dies you may lose it.
 - Reads like Sublime: a **tab bar** on top and the full text below; swipe between tabs. Each
   tab shows when it was **last modified**; sort tabs as in Sublime or most recent first.
 - One-tap **copy the full text** of any tab.
-- Read-only for now. Future: edits from the phone open as a *new* tab in Sublime, never
-  touching the original.
+- **Edit from the phone** with a plain-text editor (Sublime's monospaced font, undo/redo,
+  find and replace, auto-indent). Everything you type is saved on the phone at once and sent
+  every few seconds; in Sublime it appears as a new "✎ title" tab, never touching the original.
+  If that tab was changed on the Mac meanwhile, a numbered copy opens instead.
+- Create new tabs, hide tabs (with undo), mark tabs as private (shown as dots in lists) and
+  close tabs in Sublime when nothing would be lost.
 
 ## Security model
 
@@ -63,7 +67,7 @@ Sublime Text ──(plugin)──► macOS agent ──(Tailscale)──► Andr
 
 ## Documentation
 
-- Design: [docs/design.md](docs/design.md) · [docs/design.es.md](docs/design.es.md)
+- Design: [docs/design.md](docs/design.md) · [docs/design.es.md](docs/design.es.md); editing (v0.2): [docs/design-v0.2.md](docs/design-v0.2.md) · [docs/design-v0.2.es.md](docs/design-v0.2.es.md)
 - Installation: [docs/install.md](docs/install.md) · [docs/install.es.md](docs/install.es.md)
 - Cleaning up after a build: [docs/cleanup.md](docs/cleanup.md) · [docs/cleanup.es.md](docs/cleanup.es.md)
 

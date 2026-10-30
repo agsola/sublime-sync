@@ -9,5 +9,6 @@
   "plaintext": "{\"hello\":\"mundo ñ\"}",
   "aad": "blob:abc",
   "blobId": "7a5832c4113460878211533a7057084f",
-  "envelope": "AWMNzSkAAQIDBAUGBwgJCgtGfrulD+Asj6q/SvsNPV2dCKxvGowAe2/zLDdBT2RB6/3PMuQT7peO"
+  "envelope": "AWMNzSkAAQIDBAUGBwgJCgtGfrulD+Asj6q/SvsNPV2dCKxvGowAe2/zLDdBT2RB6/3PMuQT7peO",
+  "envelopeV2": "AmMNzSkAAQIDBAUGBwgJCgu2VVO7QeQmwfzyBbRBNEfTr3JtpI0KQKZFRbHEoxJtAiKLNss="
 }

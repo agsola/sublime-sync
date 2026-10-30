@@ -55,7 +55,7 @@ fun SettingsScreen(vm: AppViewModel) {
 
     Scaffold(containerColor = p.editor, topBar = { BackBar(stringResource(R.string.settings), onBack = { vm.back() }) }) { pad ->
         Column(Modifier.padding(pad).fillMaxSize().verticalScroll(rememberScrollState()).padding(vertical = 8.dp)) {
-            Section(stringResource(R.string.layout_title))
+            Section(stringResource(R.string.layout_title), first = true)
             Choice(stringResource(R.string.layout_list), stringResource(R.string.layout_list_hint), s.layout == Layout.WINDOWS_LIST) {
                 vm.settings.update { it.copy(layout = Layout.WINDOWS_LIST) }
             }
@@ -82,7 +82,7 @@ fun SettingsScreen(vm: AppViewModel) {
                     onValueChange = { v -> vm.settings.update { it.copy(textSize = v.toInt()) } },
                     valueRange = SettingsStore.TEXT_SIZES.first.toFloat()..SettingsStore.TEXT_SIZES.last.toFloat(),
                     steps = SettingsStore.TEXT_SIZES.last - SettingsStore.TEXT_SIZES.first - 1,
-                    colors = SliderDefaults.colors(thumbColor = p.blue, activeTrackColor = p.blue),
+                    colors = SliderDefaults.colors(thumbColor = p.blue, activeTrackColor = p.blue, inactiveTrackColor = p.rule, activeTickColor = p.editor, inactiveTickColor = p.dim),
                     modifier = Modifier.weight(1f),
                 )
             }
@@ -92,6 +92,25 @@ fun SettingsScreen(vm: AppViewModel) {
                 color = p.text,
                 modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
             )
+
+            Section(stringResource(R.string.tabs_section))
+            val hiddenCount = vm.phoneState.collectAsState().value.entries.count { it.value.hidden }
+            val draftCount = vm.draftList.collectAsState().value.size
+            Action(stringResource(R.string.hidden_tabs_n, hiddenCount), stringResource(R.string.hidden_tabs_hint)) { vm.open(Screen.Hidden) }
+            Action(stringResource(R.string.drafts_n, draftCount), stringResource(R.string.drafts_hint)) { vm.open(Screen.Drafts) }
+            Row(Modifier.padding(horizontal = 20.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text(stringResource(R.string.sync_every), style = MaterialTheme.typography.bodyLarge, color = p.text)
+                Spacer(Modifier.width(12.dp))
+                Slider(
+                    value = s.syncSeconds.toFloat(),
+                    onValueChange = { v -> vm.settings.update { it.copy(syncSeconds = v.toInt()) } },
+                    valueRange = SettingsStore.SYNC_SECONDS.first.toFloat()..SettingsStore.SYNC_SECONDS.last.toFloat(),
+                    colors = SliderDefaults.colors(thumbColor = p.blue, activeTrackColor = p.blue, inactiveTrackColor = p.rule, activeTickColor = p.editor, inactiveTickColor = p.dim),
+                    modifier = Modifier.weight(1f),
+                )
+                Spacer(Modifier.width(8.dp))
+                Text(stringResource(R.string.seconds_n, s.syncSeconds), style = MaterialTheme.typography.labelLarge, color = p.text)
+            }
 
             Section(stringResource(R.string.sources_title))
             Choice(stringResource(R.string.sources_both), stringResource(R.string.sources_both_hint), s.sources == Sources.BOTH) {
@@ -133,11 +152,13 @@ fun SettingsScreen(vm: AppViewModel) {
 }
 
 @Composable
-private fun Section(title: String) {
+private fun Section(title: String, first: Boolean = false) {
     val p = LocalPalette.current
     Column {
-        Spacer(Modifier.height(16.dp))
-        HorizontalDivider(color = p.rule)
+        if (!first) {
+            Spacer(Modifier.height(16.dp))
+            HorizontalDivider(color = p.rule)
+        }
         Text(title, style = MaterialTheme.typography.titleSmall, color = p.blue, modifier = Modifier.padding(start = 20.dp, top = 16.dp, bottom = 4.dp))
     }
 }
@@ -168,7 +189,7 @@ private fun Toggle(label: String, hint: String, checked: Boolean, onChange: (Boo
         Spacer(Modifier.width(12.dp))
         Switch(
             checked = checked, onCheckedChange = onChange,
-            colors = SwitchDefaults.colors(checkedTrackColor = p.blue, checkedThumbColor = p.editor),
+            colors = SwitchDefaults.colors(checkedTrackColor = p.blue, checkedThumbColor = p.editor, uncheckedTrackColor = p.rule, uncheckedThumbColor = p.dim, uncheckedBorderColor = p.dim),
         )
     }
 }

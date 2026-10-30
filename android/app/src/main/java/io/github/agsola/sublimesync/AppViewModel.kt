@@ -7,6 +7,14 @@ import android.security.keystore.UserNotAuthenticatedException
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import io.github.agsola.sublimesync.data.Cache
+import kotlinx.coroutines.withTimeoutOrNull
+import kotlinx.coroutines.channels.Channel
+import io.github.agsola.sublimesync.model.PhoneState
+import io.github.agsola.sublimesync.data.PhoneStateStore
+import io.github.agsola.sublimesync.data.DraftSyncer
+import io.github.agsola.sublimesync.data.DraftStore
+import io.github.agsola.sublimesync.data.Draft
+import io.github.agsola.sublimesync.data.CommandApi
 import io.github.agsola.sublimesync.data.HttpSource
 import io.github.agsola.sublimesync.data.Repository
 import io.github.agsola.sublimesync.data.TabsView
@@ -38,9 +46,13 @@ sealed interface Screen {
     data object Overview : Screen
     data object History : Screen
     data object Settings : Screen
+    /** Editing a phone draft. */
+    data class Editor(val draftId: String) : Screen
+    data object Drafts : Screen
+    data object Hidden : Screen
 }
 
-class AppViewModel(app: Application) : AndroidViewModel(app) {
+class AppViewModel(private val app: Application) : AndroidViewModel(app) {
     private val vault = KeyVault(app)
     val settings = SettingsStore(app)
 
@@ -109,6 +121,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     fun onBackground() {
         backgroundedAt = SystemClock.elapsedRealtime()
+        // Keep what was typed and try to send it before Android may stop the app.
+        drafts?.flush()
+        syncNow()
     }
 
     fun onForeground() {
@@ -138,6 +153,12 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun lock() {
+        drafts?.flush()
+        drafts = null
+        syncer = null
+        phoneStateStore = null
+        _phoneState.value = PhoneState()
+        _draftList.value = emptyList()
         session?.cancel()
         session = null
         repository = null
@@ -203,11 +224,119 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             repo.loadCache()
             repo.refresh()
         }
+
+        // Editing: drafts and hidden/private flags, saved on the phone and synced.
+        val targets = listOfNotNull<CommandApi>(mac, server)
+        val ps = PhoneStateStore(File(app.filesDir, "phone-state"), keyring, current)
+        val ds = DraftStore(File(app.filesDir, "drafts"), current, keyring)
+        val sy = DraftSyncer(ds, { targets }, current, keyring)
+        phoneStateStore = ps
+        drafts = ds
+        syncer = sy
+        scope.launch { ps.state.collect { _phoneState.value = it } }
+        scope.launch { ds.drafts.collect { _draftList.value = it } }
+        scope.launch {
+            while (true) {
+                runCatching { sy.syncOnce() }
+                (server ?: mac)?.let { api -> runCatching { ps.sync(api) } }
+                withTimeoutOrNull(settings.settings.value.syncSeconds * 1000L) { syncKick.receive() }
+            }
+        }
     }
+
+    // --- editing, hiding, private, closing ---------------------------------
+
+    private var drafts: DraftStore? = null
+    private var syncer: DraftSyncer? = null
+    private var phoneStateStore: PhoneStateStore? = null
+    private val syncKick = Channel<Unit>(Channel.CONFLATED)
+
+    private val _phoneState = MutableStateFlow(PhoneState())
+    val phoneState: StateFlow<PhoneState> = _phoneState.asStateFlow()
+
+    private val _draftList = MutableStateFlow<List<Draft>>(emptyList())
+    val draftList: StateFlow<List<Draft>> = _draftList.asStateFlow()
+
+    /** Sends pending edits and flags now instead of waiting for the interval. */
+    fun syncNow() {
+        syncKick.trySend(Unit)
+    }
+
+    /** Opens the editor on a tab, reusing its draft if there is one. */
+    fun edit(tab: io.github.agsola.sublimesync.model.Tab) {
+        if (tab.truncated) {
+            // Only the first 5 MB reach the phone: editing would start from incomplete text.
+            android.widget.Toast.makeText(app, R.string.too_large_to_edit, android.widget.Toast.LENGTH_LONG).show()
+            return
+        }
+        val ds = drafts ?: return
+        val d = ds.forTab(tab.uid, tab.draft) ?: ds.create(sourceUid = tab.uid.ifBlank { null }, title = tab.title, text = tab.text)
+        _screen.value = Screen.Editor(d.id)
+    }
+
+    fun newTab() {
+        val ds = drafts ?: return
+        _screen.value = Screen.Editor(ds.create(sourceUid = null, title = "", text = "").id)
+    }
+
+    fun draft(id: String): Draft? = drafts?.get(id)
+
+    fun updateDraft(id: String, text: String) {
+        drafts?.update(id, text)
+    }
+
+    /** Drafts opened but never edited are discarded on leaving the editor. */
+    fun leaveEditor(draftId: String) {
+        drafts?.let { ds ->
+            ds.flush()
+            ds.get(draftId)?.let { if (it.rev == 1L && it.commandId == null) ds.delete(draftId) }
+        }
+        syncNow()
+        _screen.value = Screen.Main
+    }
+
+    fun flushDrafts() {
+        drafts?.flush()
+    }
+
+    fun deleteDraft(id: String) {
+        drafts?.delete(id)
+    }
+
+    fun setHidden(uid: String, hidden: Boolean) {
+        phoneStateStore?.setHidden(uid, hidden)
+        syncNow()
+    }
+
+    fun setPrivate(uid: String, private: Boolean) {
+        phoneStateStore?.setPrivate(uid, private)
+        syncNow()
+    }
+
+    /** Asks Sublime to close a tab; [done] gets the answer (null if nothing could be reached). */
+    fun closeInSublime(tab: io.github.agsola.sublimesync.model.Tab, done: (io.github.agsola.sublimesync.model.Result?) -> Unit) {
+        val sy = syncer ?: return done(null)
+        session?.launch {
+            val r = sy.close(tab.uid)
+            // A closed "✎" tab whose draft has nothing unsent: the draft is done.
+            if (r?.status == "applied" && tab.draft.isNotBlank()) {
+                drafts?.get(tab.draft)?.let { if (it.rev == it.sentRev) drafts?.delete(it.id) }
+            }
+            done(r)
+            repository?.refresh()
+        }
+    }
+
+    /** True only while a refresh the user asked for (pull down) is running. */
+    private val _userRefreshing = MutableStateFlow(false)
+    val userRefreshing: StateFlow<Boolean> = _userRefreshing.asStateFlow()
 
     fun refresh() {
         val repo = repository ?: return
-        session?.launch { repo.refresh() }
+        _userRefreshing.value = true
+        session?.launch {
+            try { repo.refresh() } finally { _userRefreshing.value = false }
+        }
     }
 
     fun open(screen: Screen) {
@@ -242,7 +371,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun back(): Boolean = when (_screen.value) {
-        Screen.Overview, Screen.History, Screen.Settings, is Screen.Tab -> { _screen.value = Screen.Main; true }
+        Screen.Overview, Screen.History, Screen.Settings, is Screen.Tab, Screen.Drafts -> { _screen.value = Screen.Main; true }
+        is Screen.Editor -> { leaveEditor((_screen.value as Screen.Editor).draftId); true }
+        Screen.Hidden -> { _screen.value = Screen.Settings; true }
         Screen.Pair -> if (repository != null) { _screen.value = Screen.Main; true } else false
         Screen.Main -> if (_historic.value != null) { backToNow(); true } else false
         else -> false

@@ -12,8 +12,9 @@ import (
 
 // Event is what travels over /v1/ws.
 type Event struct {
-	Type      string `json:"type"` // "snapshot", "presence", "heartbeat"
+	Type      string `json:"type"` // "snapshot", "presence", "heartbeat", "command", "result"
 	Seq       int64  `json:"seq,omitempty"`
+	ID        string `json:"id,omitempty"`
 	MacOnline *bool  `json:"macOnline,omitempty"`
 }
 
@@ -25,6 +26,7 @@ type Hub struct {
 
 	mu       sync.Mutex
 	phones   map[chan Event]struct{}
+	macs     map[chan Event]struct{}
 	lastSeen time.Time
 	online   bool
 }
@@ -32,7 +34,7 @@ type Hub struct {
 // NewHub creates a hub; the Mac counts as online for heartbeatTimeout after
 // it was last seen.
 func NewHub(heartbeatTimeout, pingInterval time.Duration) *Hub {
-	return &Hub{timeout: heartbeatTimeout, pingInterval: pingInterval, phones: map[chan Event]struct{}{}}
+	return &Hub{timeout: heartbeatTimeout, pingInterval: pingInterval, phones: map[chan Event]struct{}{}, macs: map[chan Event]struct{}{}}
 }
 
 // NewSelfHub is used by the agent, which is the Mac and therefore always online.
@@ -92,6 +94,25 @@ func (h *Hub) NotifySnapshot(seq int64) {
 	h.broadcastLocked(Event{Type: "snapshot", Seq: seq})
 }
 
+// NotifyCommand tells connected Macs that a phone queued a command.
+func (h *Hub) NotifyCommand() {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	for ch := range h.macs {
+		select {
+		case ch <- Event{Type: "command"}:
+		default:
+		}
+	}
+}
+
+// NotifyResult tells phones that the Mac answered a command.
+func (h *Hub) NotifyResult(id string) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.broadcastLocked(Event{Type: "result", ID: id})
+}
+
 func (h *Hub) broadcastLocked(e Event) {
 	for ch := range h.phones {
 		select {
@@ -135,36 +156,35 @@ func (h *Hub) ServeWS(w http.ResponseWriter, r *http.Request) {
 		}
 	}()
 
-	if role == "mac" {
-		h.MarkMacSeen()
-		for {
-			_, data, err := c.Read(ctx)
-			if err != nil {
-				return
-			}
-			var e Event
-			if json.Unmarshal(data, &e) == nil && e.Type == "heartbeat" {
-				h.MarkMacSeen()
-			}
-		}
-	}
-
 	ch := make(chan Event, 16)
+	set := h.phones
+	if role == "mac" {
+		set = h.macs
+	}
 	h.mu.Lock()
-	h.phones[ch] = struct{}{}
+	set[ch] = struct{}{}
 	h.mu.Unlock()
 	defer func() {
 		h.mu.Lock()
-		delete(h.phones, ch)
+		delete(set, ch)
 		h.mu.Unlock()
 	}()
-	online, _ := h.MacOnline()
-	ch <- presence(online)
-	go func() { // reads only to notice the close
+	if role == "mac" {
+		h.MarkMacSeen()
+	} else {
+		online, _ := h.MacOnline()
+		ch <- presence(online)
+	}
+	go func() { // phones only read to notice the close; the Mac sends heartbeats
 		for {
-			if _, _, err := c.Read(ctx); err != nil {
+			_, data, err := c.Read(ctx)
+			if err != nil {
 				cancel()
 				return
+			}
+			var e Event
+			if role == "mac" && json.Unmarshal(data, &e) == nil && e.Type == "heartbeat" {
+				h.MarkMacSeen()
 			}
 		}
 	}()

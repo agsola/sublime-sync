@@ -28,7 +28,7 @@ func TestListenPluginReceivesTabs(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	got := make(chan []proto.Tab, 1)
-	go ListenPlugin(ctx, sock, func(tabs []proto.Tab) { got <- tabs })
+	go ListenPlugin(ctx, sock, tabsOnly(func(tabs []proto.Tab) { got <- tabs }))
 	var conn net.Conn
 	var err error
 	for i := 0; i < 50; i++ {
@@ -124,3 +124,9 @@ func TestWatchSessionOnlyWhenPluginSilent(t *testing.T) {
 		t.Fatalf("calls %d, want 1 (file unchanged after first read)", calls.Load())
 	}
 }
+
+type tabsOnly func([]proto.Tab)
+
+func (f tabsOnly) OnTabs(t []proto.Tab)   { f(t) }
+func (tabsOnly) OnResults([]proto.Result) {}
+func (tabsOnly) Pending() []proto.Command { return nil }

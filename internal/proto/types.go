@@ -13,6 +13,11 @@ type Tab struct {
 	Syntax     string  `json:"syntax"`
 	Text       string  `json:"text"`
 	Truncated  bool    `json:"truncated"`
+	// UID is a stable id the plugin stores in the view's settings, so it
+	// survives Sublime restarts (view ids don't).
+	UID string `json:"uid,omitempty"`
+	// Draft is the phone draft this "✎" tab shows, if any.
+	Draft string `json:"draft,omitempty"`
 	// Modified is when the text last changed (unix ms): the file's mtime for
 	// saved files, otherwise when the agent first saw the current text.
 	Modified int64 `json:"modified"`
@@ -48,3 +53,53 @@ type PairPayload struct {
 
 // MaxTabBytes is the per-tab size limit; longer texts are truncated.
 const MaxTabBytes = 5 * 1024 * 1024
+
+// Command types sent from the phone to the Mac.
+const (
+	CommandDraft = "draft" // create or update the "✎" tab of a phone draft
+	CommandClose = "close" // close a tab in Sublime if it is safe
+)
+
+// Command is sealed by the phone (AAD CommandAAD(id)) and applied by the plugin.
+type Command struct {
+	ID        string `json:"id"`
+	Type      string `json:"type"`
+	Created   int64  `json:"created"`
+	DraftID   string `json:"draftId,omitempty"`
+	SourceUID string `json:"sourceUid,omitempty"`
+	Title     string `json:"title,omitempty"`
+	Text      string `json:"text,omitempty"`
+	Rev       int64  `json:"rev,omitempty"`
+	UID       string `json:"uid,omitempty"`
+}
+
+// Result statuses.
+const (
+	ResultApplied  = "applied"
+	ResultConflict = "conflict" // the "✎" tab changed on the Mac; a numbered copy was opened
+	ResultRefused  = "refused"  // e.g. closing a tab with unsaved changes
+	ResultRejected = "rejected" // replayed, too old or undecryptable
+)
+
+// Result is sealed by the Mac (AAD ResultAAD(id)).
+type Result struct {
+	ID     string `json:"id"`
+	Status string `json:"status"`
+	Reason string `json:"reason,omitempty"`
+	UID    string `json:"uid,omitempty"`
+	At     int64  `json:"at"`
+}
+
+// PhoneState holds per-tab flags shared by phones (AAD StateAAD("phone-state")).
+type PhoneState struct {
+	Entries map[string]PhoneEntry `json:"entries"`
+}
+
+type PhoneEntry struct {
+	Hidden  bool  `json:"hidden"`
+	Private bool  `json:"private"`
+	At      int64 `json:"at"`
+}
+
+// MaxCommandAge is how old a command may be before the Mac rejects it.
+const MaxCommandAge = 7 * 24 * 60 * 60 * 1000

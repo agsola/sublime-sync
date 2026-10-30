@@ -27,6 +27,47 @@ func New(st *store.Store, installToken string, hub *api.Hub) http.Handler {
 	mux := http.NewServeMux()
 	api.ReadRoutes(mux, st, auth, hub)
 
+	api.WriteRoutes(mux, st, auth, hub, nil)
+
+	// The Mac collects pending commands and posts their results.
+	mux.HandleFunc("GET /v1/commands", func(w http.ResponseWriter, r *http.Request) {
+		if !auth(r) {
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			return
+		}
+		cmds, err := st.PendingCommands()
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		out := make([]api.CommandJSON, 0, len(cmds))
+		for _, c := range cmds {
+			out = append(out, api.CommandJSON{ID: c.ID, Created: c.Created, Envelope: c.Envelope})
+		}
+		api.WriteJSON(w, out)
+	})
+	mux.HandleFunc("PUT /v1/commands/{id}/result", func(w http.ResponseWriter, r *http.Request) {
+		if !auth(r) {
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			return
+		}
+		env, err := readAll(w, r, api.MaxCommandBytes)
+		if err != nil {
+			return
+		}
+		id := r.PathValue("id")
+		if err := st.SetCommandResult(id, env, time.Now().UnixMilli()); errors.Is(err, store.ErrNotFound) {
+			http.NotFound(w, r)
+			return
+		} else if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		hub.MarkMacSeen()
+		hub.NotifyResult(id)
+		w.WriteHeader(http.StatusNoContent)
+	})
+
 	mux.HandleFunc("POST /v1/register", func(w http.ResponseWriter, r *http.Request) {
 		var body struct {
 			AuthHash string `json:"authHash"`

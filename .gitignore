@@ -1,0 +1,31 @@
+# Private, deployment-specific data (domains, hosts, users, keys). Never commit.
+# Put anything that identifies a real deployment in one of these.
+local/
+*.local.*
+.env
+.env.*
+config.private.*
+*.pem
+*.key
+
+# Build outputs
+/bin/
+/dist/
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+*.apk
+*.aab
+
+# OS / editor
+.DS_Store
+.idea/
+*.iml
+
+# Local Claude Code settings
+.claude/settings.local.json
+
+# Python
+__pycache__/
+*.pyc

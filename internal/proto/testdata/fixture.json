@@ -1,0 +1,19 @@
+{
+  "snapshots": [
+    {
+      "seq": 1,
+      "at": 1793361600000,
+      "envelope": "AWMNzSlnYggWdt10gJ4OqdC8FnDcc2tetyRab8d5gafbEONHo32dGJozY1rgRT89tq66F3XMHIIYksKHXgwsoT7Kt+QdA5H39ZpelMCzNm7OyJWgQ94UiFJZmL9Ao1blIUEULzhdlp/PoTI9OGz4vQHkv7CYbok8Ww6c+oNM46VKrbcNl4axHL1VBn6/Leua/YIlzwVzXA7fWq/OF2tfkYp+"
+    },
+    {
+      "seq": 2,
+      "at": 1793361660000,
+      "envelope": "AWMNzSksWpQLIA3JmY6CDMo5EEFSQByV7928CeCso1ZV9UuB8zvqGlpD8lsZMwLHaoB6Kw66zbUtmJg6oaHWiSy0X3U7tO7KzoaZW9I4fTu+2Om1hfUisoYkBnjnr2ZBtU3KiwLxFpfnwqRhdHf03FZRWYEgxjJTP1Y2ml9zMToy99h8FzcSn9l0pWKdik1swLEkS3sa2oWO2osHBUvmM1SLlVK6Vhac2A=="
+    }
+  ],
+  "blobs": {
+    "437389bea9bf9299b76397992fd62490": "AWMNzSlZGSLVIpPBHB7mZOUu0s+f0Jb3j6QfrVdrYpnyTSdb6mqF2Xj03s80/Y1xewGgKFiRZ10C1A1JmOz2Tlq4YIMS7BBxnbfidINMfMeob1xg73si5khLzSDzsXntIDAoOEcaaPMFL3OzgExBF4ltz50S9HxBW0OrvQ13U3dqhUOlGo6eTp+tEniwf3jzFnXdFzIi",
+    "8415a0840e5a87c8ea8177d41d98b265": "AWMNzSn3CBYDdWCaO86rBA9KgBwzKISWviK2C49PfXp8BcjcusNhisA3vd1+3eKXVLDM3QVxTVjpnjEMl44/U0NTF9uducVVj+jw79DYwpb5gm+waUFMTn9EXoZCxptlSrAPPF6vLfGJhxySyh+XNZI/QZXfTpvhRhIVcLLFQ7+lLKkK3YzRnT11iQoo",
+    "b0d9ca1eed0392c3d7ec17bf60e81faa": "AWMNzSmfbWiUhSTm3T+dooHYExyRXCSOAuiC2uRPLyPEnwsWHKq9gC7s5k0T3OTHKS6w58G7cpV8IrPnNsyWFDLM9pz7vHuRO2UkpsEDra7QZnsr1DYsbRJNgT3PbpaWtdjeNXfno8kpKZfJ0rIqkBKs1HPuavi5Sgblpkj+Ul7lVi46jC2V"
+  }
+}

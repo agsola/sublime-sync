@@ -1,0 +1,13 @@
+{
+  "windows": [
+    {
+      "window_id": 4,
+      "buffers": [
+        {"contents": "first line\nsecond", "settings": {"name": "first line"}},
+        {"file": "FILE_PLACEHOLDER", "settings": {"name": ""}},
+        {"file": "/nonexistent/file.txt", "settings": {}},
+        {"settings": {}}
+      ]
+    }
+  ]
+}

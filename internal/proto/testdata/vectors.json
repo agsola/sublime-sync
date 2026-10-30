@@ -1,0 +1,13 @@
+{
+  "master": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+  "keyId": "630dcd29",
+  "content": "a8fe1b27986144ac5ed344c8f203fd48b9ea67f572eb0b4fc062f7664591cf0a",
+  "blobIdKey": "faad50d8abba91200fab93ea41a6e123296a95fba169bfa773b85447159a80cb",
+  "serverAuth": "d57baae3fd3d3e10a55024af8e6d1027331fe203ced901a8192ba9f6c6b3fc50",
+  "macAuth": "25b5abc62be213dd9e50858f5c48303e308c55d025b03157d06fcd9d9afd9098",
+  "serverToken": "1Xuq4_09PhClUCSvjm0QJzMf4gPO2QGoGSup9saz_FA",
+  "plaintext": "{\"hello\":\"mundo ñ\"}",
+  "aad": "blob:abc",
+  "blobId": "7a5832c4113460878211533a7057084f",
+  "envelope": "AWMNzSkAAQIDBAUGBwgJCgtGfrulD+Asj6q/SvsNPV2dCKxvGowAe2/zLDdBT2RB6/3PMuQT7peO"
+}

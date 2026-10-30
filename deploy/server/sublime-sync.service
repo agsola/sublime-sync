@@ -1,0 +1,31 @@
+[Unit]
+Description=sublime-sync relay server
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=sublime-sync
+Group=sublime-sync
+EnvironmentFile=/etc/sublime-sync/env
+Environment=DATA_DIR=/var/lib/sublime-sync
+ExecStart=/opt/sublime-sync/bin/sublime-sync-server
+Restart=always
+RestartSec=3
+UMask=0077
+
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+RestrictNamespaces=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+ReadWritePaths=/var/lib/sublime-sync
+
+[Install]
+WantedBy=multi-user.target

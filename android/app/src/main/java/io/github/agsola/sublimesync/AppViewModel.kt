@@ -228,7 +228,7 @@ class AppViewModel(private val app: Application) : AndroidViewModel(app) {
         // Editing: drafts and hidden/private flags, saved on the phone and synced.
         val targets = listOfNotNull<CommandApi>(mac, server)
         val ps = PhoneStateStore(File(app.filesDir, "phone-state"), keyring, current)
-        val ds = DraftStore(File(app.filesDir, "drafts"), current, keyring)
+        val ds = DraftStore(File(app.filesDir, "drafts"), current, keyring).also { it.discardUntouched() }
         val sy = DraftSyncer(ds, { targets }, current, keyring)
         phoneStateStore = ps
         drafts = ds

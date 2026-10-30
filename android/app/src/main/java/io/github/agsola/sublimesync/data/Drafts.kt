@@ -86,6 +86,12 @@ class DraftStore(
         dirty -= id
     }
 
+    /** Drops drafts opened but never edited nor sent (e.g. left when the app was killed). */
+    @Synchronized
+    fun discardUntouched() {
+        _drafts.value.filter { it.rev == 1L && it.commandId == null }.forEach { delete(it.id) }
+    }
+
     @Synchronized
     fun delete(id: String) {
         _drafts.value = _drafts.value.filter { it.id != id }

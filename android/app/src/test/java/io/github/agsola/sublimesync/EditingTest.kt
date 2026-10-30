@@ -156,6 +156,17 @@ class EditingTest {
         assertTrue(api.posted.isEmpty())
     }
 
+    @Test fun untouchedDraftsDiscardedOnOpen() {
+        val dir = tmp.newFolder("d7")
+        val s = DraftStore(dir, keys, ring) { now }
+        s.create(null, "", "")                          // opened, never edited (e.g. the app was killed)
+        val kept = s.create("u", "t", "x").also { s.update(it.id, "xy") }
+        s.flush()
+        val reopened = DraftStore(dir, keys, ring) { now }
+        reopened.discardUntouched()
+        assertEquals(listOf(kept.id), reopened.drafts.value.map { it.id })
+    }
+
     @Test fun sendsOnlyLatestRevision() = runTest {
         val api = FakeApi()
         val s = DraftStore(tmp.newFolder("d2"), keys, ring) { now }

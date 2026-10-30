@@ -67,3 +67,22 @@ class TextCacheTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class UnchangedTest(unittest.TestCase):
+    def test_mark_unchanged(self):
+        from snapshot import mark_unchanged
+        sent = {1: 5}
+        tab = {"id": 1, "text": "big"}
+        mark_unchanged(tab, 5, sent)
+        self.assertTrue(tab["unchanged"])
+        self.assertNotIn("text", tab)
+        tab2 = {"id": 1, "text": "big2"}
+        mark_unchanged(tab2, 6, sent)
+        self.assertNotIn("unchanged", tab2)
+        self.assertEqual(tab2["text"], "big2")
+
+    def test_send_timeout_grows_with_size(self):
+        from snapshot import send_timeout
+        self.assertEqual(send_timeout(1000), 5.0)
+        self.assertGreater(send_timeout(80 * 1024 * 1024), 15.0)

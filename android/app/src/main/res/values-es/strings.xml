@@ -24,7 +24,6 @@
     <string name="find">Buscar en el texto</string>
     <string name="matches">%1$d coincidencias</string>
     <string name="monospace">Monoespaciada</string>
-    <string name="truncated">Esta pestaña ocupa más de 5 MB; solo se muestra el principio.</string>
     <string name="history">Histórico</string>
     <string name="load_more">Cargar más</string>
     <string name="viewing_copy">Viendo copia del %1$s</string>
@@ -126,5 +125,7 @@
     <string name="more">Más opciones</string>
     <string name="hidden_tabs_hint">Vuelve a mostrar las pestañas que ocultaste</string>
     <string name="drafts_hint">Tus ediciones, guardadas en este móvil</string>
-    <string name="too_large_to_edit">Esta pestaña ocupa más de 5 MB: al móvil solo llega el principio, así que no se puede editar aquí. Puedes leerla y copiarla.</string>
+    <string name="too_large_to_edit">Esta pestaña tiene más de 5 millones de caracteres: demasiado grande para editarla con soltura en el móvil. Puedes leerla y copiarla.</string>
+    <string name="truncated_cannot_edit">Al móvil solo llega el principio de esta pestaña (no cabe ni comprimida), así que no se puede editar aquí.</string>
+    <string name="truncated">Esta pestaña es demasiado grande para sincronizarla entera; solo se muestra el principio.</string>
 </resources>

@@ -1,6 +1,9 @@
 package agent
 
 import (
+	"crypto/rand"
+	"encoding/base64"
+	"encoding/json"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -72,14 +75,57 @@ func TestIgnoresEmptySnapshot(t *testing.T) {
 
 func TestTruncatesLargeTab(t *testing.T) {
 	text := strings.Repeat("ñ", 3*1024*1024) // 6 MiB of 2-byte runes
-	got, truncated := truncateUTF8(text+"x", proto.MaxTabBytes, false)
-	if !truncated || len(got) > proto.MaxTabBytes || len(got) < proto.MaxTabBytes-3 || !utf8.ValidString(got) {
+	limit := 5 << 20
+	got, truncated := truncateUTF8(text+"x", limit, false)
+	if !truncated || len(got) > limit || len(got) < limit-3 || !utf8.ValidString(got) {
 		t.Fatalf("len=%d truncated=%v valid=%v", len(got), truncated, utf8.ValidString(got))
 	}
 	odd := "a" + text // forces a cut in the middle of a rune
-	got, _ = truncateUTF8(odd, proto.MaxTabBytes, false)
+	got, _ = truncateUTF8(odd, limit, false)
 	if !utf8.ValidString(got) {
 		t.Fatal("cut inside a rune")
+	}
+}
+
+func TestFitsCompressedLimit(t *testing.T) {
+	if testing.Short() {
+		t.Skip("large texts")
+	}
+	st := openStore(t, filepath.Join(t.TempDir(), "a.db"))
+	s := NewSnapshotter(st, testKeys(t), nil)
+	// 30 MB of log-like text compresses far below the server limit: kept whole.
+	logText := strings.Repeat("2026-10-30 12:00:01 INFO request handled in 12 ms ñ\n", 30<<20/52)
+	// 30 MB of random base64 barely compresses: must be cut to fit.
+	rnd := make([]byte, 23<<20)
+	rand.Read(rnd)
+	noisy := base64.StdEncoding.EncodeToString(rnd)
+	in := tabs(logText, noisy)
+	if _, _, err := s.Ingest(in, proto.SourcePlugin, time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	snap, _ := st.Latest()
+	k := s.keys
+	for _, id := range snap.Blobs {
+		env, _ := st.GetBlob(id)
+		if len(env) > proto.MaxBlobEnvelope {
+			t.Fatalf("blob %d bytes > limit", len(env))
+		}
+		plain, err := proto.Open(map[string]proto.Keys{k.ID: k}, proto.BlobAAD(id), env)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var tab proto.Tab
+		json.Unmarshal(plain, &tab)
+		switch tab.ID {
+		case 1:
+			if tab.Truncated || len(tab.Text) != len(logText) {
+				t.Fatalf("compressible tab cut: %d of %d", len(tab.Text), len(logText))
+			}
+		case 2:
+			if !tab.Truncated || !utf8.ValidString(tab.Text) || len(tab.Text) < 10<<20 {
+				t.Fatalf("noisy tab: truncated=%v len=%d", tab.Truncated, len(tab.Text))
+			}
+		}
 	}
 }
 
@@ -151,5 +197,24 @@ func TestModifiedTracksTextChanges(t *testing.T) {
 	}
 	if got[2].Modified != t0.Add(time.Hour).UnixMilli() {
 		t.Fatalf("changed tab got %d", got[2].Modified)
+	}
+}
+
+func TestModifiedSurvivesSessionFallback(t *testing.T) {
+	st := openStore(t, filepath.Join(t.TempDir(), "a.db"))
+	s := NewSnapshotter(st, testKeys(t), nil)
+	t0 := time.Date(2026, 10, 30, 10, 0, 0, 0, time.UTC)
+	s.Ingest(tabs("a", "b"), proto.SourcePlugin, t0)
+	// The session-file fallback reports the same tabs under other ids.
+	other := tabs("a", "b")
+	for i := range other {
+		other[i].ID += 4000
+	}
+	s.Ingest(other, proto.SourceSession, t0.Add(time.Hour))
+	// Back to the plugin: the original times must still be known.
+	back := tabs("a", "b")
+	s.stampModified(back, t0.Add(2*time.Hour))
+	if back[0].Modified != t0.UnixMilli() {
+		t.Fatalf("modified reset to %d", back[0].Modified)
 	}
 }

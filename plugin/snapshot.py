@@ -5,7 +5,9 @@ import json
 import os
 import threading
 
-MAX_TAB_CHARS = 5 * 1024 * 1024
+# Safety cap on what is read from Sublime; the agent cuts further so each tab
+# fits the relay once compressed.
+MAX_TAB_CHARS = 32 * 1024 * 1024
 TITLE_MAX = 80
 
 
@@ -128,3 +130,15 @@ class TextCache:
         for vid in list(self._entries):
             if vid not in view_ids:
                 del self._entries[vid]
+
+
+def mark_unchanged(tab, change_count, sent_counts):
+    """Drops the text of a tab already sent with this change count."""
+    if sent_counts.get(tab["id"]) == change_count:
+        tab.pop("text", None)
+        tab["unchanged"] = True
+
+
+def send_timeout(nbytes):
+    """Seconds to allow for sending nbytes to the agent (at least 5)."""
+    return max(5.0, nbytes / (4.0 * 1024 * 1024))

@@ -92,8 +92,8 @@ Un documento cifrado `phone-state` en el servidor (y copia local) con:
   "Conflicto: abierto como (2)" o "Sin conexión: se enviará después".
 - Lista de borradores en curso, para retomarlos.
 - Si la pestaña que se edita es ya una "✎" del móvil, se sigue editando el mismo borrador.
-- Las pestañas de más de 5 MB llegan recortadas al móvil: se pueden leer y copiar, pero no
-  editar allí (la app explica por qué).
+- Las pestañas de más de 5 millones de caracteres, o recortadas para caber en el servidor, se
+  pueden leer y copiar, pero no editar en el móvil (la app explica por qué).
 
 ## 8. Ocultar, privadas y cerrar (Android)
 

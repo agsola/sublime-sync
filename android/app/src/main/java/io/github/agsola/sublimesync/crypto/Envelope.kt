@@ -40,7 +40,8 @@ object Envelope {
             return compressed
         }
         return BrotliInputStream(ByteArrayInputStream(compressed)).use { input ->
-            val out = java.io.ByteArrayOutputStream()
+            // Text usually expands 4–10×; starting near that size avoids repeated doubling copies.
+            val out = java.io.ByteArrayOutputStream(minOf(compressed.size.toLong() * 6, MAX_PLAINTEXT.toLong()).toInt().coerceAtLeast(64 * 1024))
             val buf = ByteArray(64 * 1024)
             while (true) {
                 val n = input.read(buf)

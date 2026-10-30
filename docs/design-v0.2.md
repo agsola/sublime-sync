@@ -85,8 +85,8 @@ An encrypted `phone-state` document on the server (and a local copy) with per-ta
   "Changed on the Mac: opened as a new copy", "Waiting for Sublime to open", "No connection".
 - A list of drafts to resume them.
 - Editing a tab that already is a phone "✎" tab continues the same draft.
-- Tabs larger than 5 MB reach the phone truncated, so they can be read and copied but not
-  edited there (the app explains why).
+- Tabs over 5 million characters, or cut to fit the relay, can be read and copied but not
+  edited on the phone (the app explains why).
 
 ## 8. Hide, private and close (Android)
 

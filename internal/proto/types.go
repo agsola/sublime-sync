@@ -18,6 +18,9 @@ type Tab struct {
 	UID string `json:"uid,omitempty"`
 	// Draft is the phone draft this "✎" tab shows, if any.
 	Draft string `json:"draft,omitempty"`
+	// Unchanged is only used between the plugin and the agent: the text was
+	// already sent and is omitted. Never stored.
+	Unchanged bool `json:"unchanged,omitempty"`
 	// Modified is when the text last changed (unix ms): the file's mtime for
 	// saved files, otherwise when the agent first saw the current text.
 	Modified int64 `json:"modified"`
@@ -51,8 +54,13 @@ type PairPayload struct {
 	Mac    string `json:"m"`
 }
 
-// MaxTabBytes is the per-tab size limit; longer texts are truncated.
-const MaxTabBytes = 5 * 1024 * 1024
+// Per-tab limits. What really bounds a tab is its sealed (compressed) size,
+// which must fit the relay's per-blob limit; MaxTabBytes is only a safety cap
+// so the tab's JSON stays under MaxPlaintext when opened.
+const (
+	MaxTabBytes     = 60 << 20
+	MaxBlobEnvelope = 16<<20 - 4096 // relay accepts 16 MiB per blob
+)
 
 // Command types sent from the phone to the Mac.
 const (

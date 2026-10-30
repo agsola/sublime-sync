@@ -16,8 +16,8 @@ import sublime_plugin
 
 from .commands import close_decision, draft_title, plan_draft, text_hash
 from .snapshot import (MAX_TAB_CHARS, Debouncer, TextCache, encode_bye,
-                       file_mtime_ms, socket_path, tab_from_view_data,
-                       window_name)
+                       file_mtime_ms, mark_unchanged, send_timeout,
+                       socket_path, tab_from_view_data, window_name)
 
 DEBOUNCE_SECONDS = 2.0
 SWEEP_MS = 60 * 1000
@@ -32,6 +32,9 @@ _loaded = False
 _texts = TextCache()
 _results = []  # results to report in the next exchange
 _results_lock = threading.Lock()  # appended on the main thread, sent from the async one
+# Change count of each view as last received by the agent; unchanged views are
+# sent without their text (the agent keeps it).
+_sent_counts = {}
 
 
 def _uid(view):
@@ -50,7 +53,9 @@ def _read(view):
 
 
 def _collect():
+    """Returns (tabs, change counts by view id)."""
     tabs = []
+    counts = {}
     seen = set()
     for window in sublime.windows():
         wname = window_name(window.project_file_name(), window.folders())
@@ -69,18 +74,25 @@ def _collect():
             draft = view.settings().get(DRAFT)
             if draft:
                 tab["draft"] = draft
+            counts[view.id()] = view.change_count()
+            mark_unchanged(tab, counts[view.id()], _sent_counts)
             tabs.append(tab)
     _texts.retain(seen)
-    return tabs
+    return tabs, counts
 
 
 def _exchange(messages):
-    """Sends our lines, then reads the agent's reply: queued commands."""
+    """Sends our lines, then reads the agent's reply.
+
+    Returns the reply dict ({"commands": [...], "needFull": bool}), or None
+    if the agent couldn't be reached.
+    """
+    payload = b"".join(messages)
     sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-    sock.settimeout(2.0)
+    sock.settimeout(send_timeout(len(payload)))
     try:
         sock.connect(socket_path())
-        sock.sendall(b"".join(messages))
+        sock.sendall(payload)
         sock.shutdown(socket.SHUT_WR)
         data = b""
         while not data.endswith(b"\n"):
@@ -93,13 +105,13 @@ def _exchange(messages):
     finally:
         sock.close()
     try:
-        reply = json.loads(data.decode("utf-8"))
-        return reply.get("commands") or []
+        return json.loads(data.decode("utf-8"))
     except ValueError:
-        return []
+        return {}
 
 
 def _send(first_message):
+    """Sends a message plus pending results; returns the reply or None."""
     global _results
     with _results_lock:
         sent, _results = _results, []
@@ -107,20 +119,31 @@ def _send(first_message):
     if sent:
         messages.append((json.dumps({"type": "results", "results": sent},
                                     ensure_ascii=False) + "\n").encode("utf-8"))
-    commands = _exchange(messages)
-    if commands is None:
+    reply = _exchange(messages)
+    if reply is None:
         with _results_lock:
             _results = sent + _results
+        return None
+    commands = reply.get("commands") or []
     if commands:
         sublime.set_timeout(lambda: _apply_all(commands), 0)
+    return reply
 
 
 
 def _snapshot_now():
+    global _sent_counts
     try:
-        tabs = _collect()
-        _send((json.dumps({"type": "snapshot", "tabs": tabs},
-                          ensure_ascii=False) + "\n").encode("utf-8"))
+        tabs, counts = _collect()
+        reply = _send((json.dumps({"type": "snapshot", "tabs": tabs},
+                                  ensure_ascii=False) + "\n").encode("utf-8"))
+        if reply is None:
+            _sent_counts = {}  # agent down: send everything next time
+        elif reply.get("needFull"):
+            _sent_counts = {}
+            _debouncer.trigger()
+        else:
+            _sent_counts = counts
     except Exception as e:  # never break the editor
         print("sublime-sync:", e)
 

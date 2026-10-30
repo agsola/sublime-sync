@@ -191,7 +191,12 @@ type fakeHandler struct {
 	pending []proto.Command
 }
 
-func (f *fakeHandler) OnTabs(t []proto.Tab) { f.mu.Lock(); f.tabs = append(f.tabs, t); f.mu.Unlock() }
+func (f *fakeHandler) OnTabs(t []proto.Tab) bool {
+	f.mu.Lock()
+	f.tabs = append(f.tabs, t)
+	f.mu.Unlock()
+	return true
+}
 func (f *fakeHandler) OnResults(r []proto.Result) {
 	f.mu.Lock()
 	f.results = append(f.results, r...)

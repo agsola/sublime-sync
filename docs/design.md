@@ -187,8 +187,12 @@ Priority: **read and copy without thinking**.
   keys (keyring with key ids) so older history stays readable. A second phone scans the same QR.
 - **QR**: shown on demand (`syncsublime pair`); single-use not required. Key stored in the
   Keychain as the agent's own item.
-- **Sizes**: tabs up to 5 MB; larger ones are sent truncated with a visible warning in the app;
-  binary buffers are skipped.
+- **Sizes** (since 0.2.1): each tab is cut only if it doesn't fit the relay once compressed and
+  encrypted (16 MB per tab), with a safety cap of 32 million characters read from Sublime. Cut
+  tabs show a warning in the app. Measured on a Pixel 10 Pro: a 32-million-character tab opens
+  in ~3.5 s and scrolls smoothly; the app uses ~380 MB of its 512 MB with ~60 million characters
+  open, so very large tabs that don't fit in memory show a notice instead of crashing.
+  The phone editor is limited to 5 million characters.
 - **Server**: idempotent install script + systemd unit + nginx snippet for WebSocket.
   `/health` endpoint; the app shows "server not responding" when it fails.
 - **Android**: minSdk 30 (Android 11), latest target. Biometrics falling back to device PIN/pattern.

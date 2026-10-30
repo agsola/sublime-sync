@@ -264,9 +264,10 @@ class AppViewModel(private val app: Application) : AndroidViewModel(app) {
 
     /** Opens the editor on a tab, reusing its draft if there is one. */
     fun edit(tab: io.github.agsola.sublimesync.model.Tab) {
-        if (tab.truncated) {
-            // Only the first 5 MB reach the phone: editing would start from incomplete text.
-            android.widget.Toast.makeText(app, R.string.too_large_to_edit, android.widget.Toast.LENGTH_LONG).show()
+        if (tab.truncated || tab.text.length > MAX_EDIT_CHARS) {
+            // Cut tabs would be edited from incomplete text; huge ones make the editor crawl.
+            val msg = if (tab.truncated) R.string.truncated_cannot_edit else R.string.too_large_to_edit
+            android.widget.Toast.makeText(app, msg, android.widget.Toast.LENGTH_LONG).show()
             return
         }
         val ds = drafts ?: return
@@ -380,6 +381,8 @@ class AppViewModel(private val app: Application) : AndroidViewModel(app) {
     }
 
     companion object {
+        /** Above this the phone editor gets too slow to be useful. */
+        const val MAX_EDIT_CHARS = 5_000_000
         private const val RELOCK_AFTER_MS = 5 * 60 * 1000L
     }
 }

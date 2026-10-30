@@ -53,6 +53,9 @@ import io.github.agsola.sublimesync.settings.sortedFor
 import io.github.agsola.sublimesync.ui.theme.JetBrainsMono
 import io.github.agsola.sublimesync.ui.theme.LocalPalette
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
 /** Every tab as a searchable list; tapping one opens it in the reader. */
@@ -69,10 +72,18 @@ fun OverviewScreen(vm: AppViewModel) {
     val scope = rememberCoroutineScope()
     val ctx = LocalContext.current
     val actions = rememberTabActions(vm, snackbar, phoneState)
-    val tabs = remember(historic, repoState.view, settings.sort, query, phoneState) {
-        visibleTabs((historic ?: repoState.view)?.tabs.orEmpty(), phoneState).sortedFor(settings.sort).filter {
-            query.isBlank() || it.title.contains(query, true) || it.text.contains(query, true)
+    val all = remember(historic, repoState.view, settings.sort, phoneState) {
+        visibleTabs((historic ?: repoState.view)?.tabs.orEmpty(), phoneState).sortedFor(settings.sort)
+    }
+    // Searching tens of MB of text is slow: do it off the UI thread, after a short pause in typing.
+    var tabs by remember { mutableStateOf(all) }
+    LaunchedEffect(all, query) {
+        if (query.isBlank()) {
+            tabs = all
+            return@LaunchedEffect
         }
+        delay(250)
+        tabs = withContext(Dispatchers.Default) { all.filter { matches(it, query) } }
     }
     val byWindow = settings.sort == SortOrder.SUBLIME && tabs.map { it.window }.distinct().size > 1
     val windowNumber = remember(tabs) { tabs.map { it.window }.distinct().withIndex().associate { it.value to it.index + 1 } }
@@ -121,3 +132,7 @@ fun OverviewScreen(vm: AppViewModel) {
     }
 }
 
+
+/** Title or text contains the query, ignoring case. */
+internal fun matches(tab: Tab, query: String): Boolean =
+    tab.title.contains(query, ignoreCase = true) || tab.text.contains(query, ignoreCase = true)

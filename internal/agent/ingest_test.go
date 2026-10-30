@@ -127,6 +127,77 @@ func TestWatchSessionOnlyWhenPluginSilent(t *testing.T) {
 
 type tabsOnly func([]proto.Tab)
 
-func (f tabsOnly) OnTabs(t []proto.Tab)   { f(t) }
-func (tabsOnly) OnResults([]proto.Result) {}
-func (tabsOnly) Pending() []proto.Command { return nil }
+func (f tabsOnly) OnTabs(t []proto.Tab) bool { f(t); return true }
+func (tabsOnly) OnResults([]proto.Result)    {}
+func (tabsOnly) Pending() []proto.Command    { return nil }
+
+func TestUnchangedTabsFilledFromCache(t *testing.T) {
+	f := NewTabFiller()
+	full := []proto.Tab{{ID: 1, Title: "a", Text: "big text"}, {ID: 2, Title: "b", Text: "x"}}
+	if got, ok := f.Fill(full); !ok || got[0].Text != "big text" {
+		t.Fatalf("full message: %v %+v", ok, got)
+	}
+	partial := []proto.Tab{{ID: 1, Title: "a", Unchanged: true}, {ID: 2, Title: "b", Text: "y"}}
+	got, ok := f.Fill(partial)
+	if !ok || got[0].Text != "big text" || got[0].Unchanged || got[1].Text != "y" {
+		t.Fatalf("partial: %v %+v", ok, got)
+	}
+}
+
+func TestMissingCacheAsksForFull(t *testing.T) {
+	f := NewTabFiller() // e.g. the agent just restarted
+	if _, ok := f.Fill([]proto.Tab{{ID: 7, Unchanged: true}}); ok {
+		t.Fatal("accepted a tab whose text it doesn't have")
+	}
+}
+
+func TestLatestQueueKeepsNewest(t *testing.T) {
+	q := NewLatestQueue()
+	q.Put([]proto.Tab{{ID: 1}})
+	q.Put([]proto.Tab{{ID: 2}}) // replaces the one not yet taken
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	got, ok := q.Take(ctx)
+	if !ok || got[0].ID != 2 {
+		t.Fatalf("%v %+v", ok, got)
+	}
+	ctx2, cancel2 := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel2()
+	if _, ok := q.Take(ctx2); ok {
+		t.Fatal("took a snapshot twice")
+	}
+}
+
+func TestPluginExchangeLargeMessageIsFast(t *testing.T) {
+	sock := shortSock(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	got := make(chan []proto.Tab, 1)
+	go ListenPlugin(ctx, sock, tabsOnly(func(tabs []proto.Tab) { got <- tabs }))
+	var conn net.Conn
+	var err error
+	for i := 0; i < 50; i++ {
+		if conn, err = net.Dial("unix", sock); err == nil {
+			break
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	if err != nil {
+		t.Fatal(err)
+	}
+	big := strings.Repeat("x", 30<<20)
+	start := time.Now()
+	go func() {
+		conn.Write([]byte(`{"type":"snapshot","tabs":[{"id":1,"text":"` + big + `"}]}` + "\n"))
+		conn.(*net.UnixConn).CloseWrite()
+	}()
+	select {
+	case tabs := <-got:
+		if len(tabs[0].Text) != len(big) {
+			t.Fatal("text cut")
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("30 MB message took more than 10 s (quadratic read?)")
+	}
+	t.Logf("30 MB read in %s", time.Since(start))
+}

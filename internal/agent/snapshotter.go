@@ -8,6 +8,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"sort"
 	"strconv"
 	"sync"
 	"time"
@@ -20,6 +21,7 @@ import (
 const (
 	metaSeq      = "seq"
 	metaModTimes = "modtimes"
+	maxModTimes  = 2000 // most recently modified tabs remembered
 )
 
 // modTime remembers when a tab's text last changed.
@@ -37,6 +39,9 @@ type Snapshotter struct {
 	mu       sync.Mutex
 	last     []proto.TabRef
 	modTimes map[string]modTime
+	// fitted maps the blob id of an oversized tab to the id of its cut version,
+	// so it isn't compressed and cut again on every snapshot.
+	fitted map[string]string
 }
 
 func NewSnapshotter(st *store.Store, k proto.Keys, notify func(seq int64)) *Snapshotter {
@@ -64,25 +69,33 @@ func (s *Snapshotter) Ingest(tabs []proto.Tab, source string, now time.Time) (se
 			return 0, false, err
 		}
 		id := proto.BlobID(s.keys, plain)
-		refs = append(refs, proto.TabRef{Blob: id, Window: t.Window, Index: t.Index})
-		if seen[id] {
-			continue
-		}
-		seen[id] = true
-		blobs = append(blobs, id)
-		has, err := s.st.HasBlob(id)
-		if err != nil {
+		if cut, ok := s.fitted[id]; ok {
+			id = cut
+		} else if has, err := s.st.HasBlob(id); err != nil {
 			return 0, false, err
-		}
-		if !has {
-			env, err := proto.Seal(s.keys, proto.BlobAAD(id), plain)
+		} else if !has {
+			orig := id
+			var env []byte
+			t, plain, id, env, err = s.sealFitting(t, plain)
 			if err != nil {
 				return 0, false, err
 			}
 			if err := s.st.PutBlob(id, env); err != nil {
 				return 0, false, err
 			}
+			if id != orig {
+				if s.fitted == nil {
+					s.fitted = map[string]string{}
+				}
+				s.fitted[orig] = id
+			}
 		}
+		refs = append(refs, proto.TabRef{Blob: id, Window: t.Window, Index: t.Index})
+		if seen[id] {
+			continue
+		}
+		seen[id] = true
+		blobs = append(blobs, id)
 	}
 	if s.last == nil {
 		s.last = s.loadLastRefs()
@@ -124,7 +137,12 @@ func (s *Snapshotter) stampModified(tabs []proto.Tab, now time.Time) {
 			json.Unmarshal([]byte(v), &s.modTimes)
 		}
 	}
-	next := make(map[string]modTime, len(tabs))
+	// Entries of tabs not in this snapshot are kept (e.g. the session-file
+	// fallback names tabs differently); the map is capped below.
+	next := make(map[string]modTime, len(s.modTimes)+len(tabs))
+	for k, v := range s.modTimes {
+		next[k] = v
+	}
 	for i := range tabs {
 		t := &tabs[i]
 		key := "v:" + strconv.FormatInt(t.ID, 10)
@@ -142,6 +160,16 @@ func (s *Snapshotter) stampModified(tabs []proto.Tab, now time.Time) {
 			t.Modified = now.UnixMilli()
 		}
 		next[key] = modTime{Hash: h, Modified: t.Modified}
+	}
+	if len(next) > maxModTimes {
+		keep := make([]string, 0, len(next))
+		for k := range next {
+			keep = append(keep, k)
+		}
+		sort.Slice(keep, func(i, j int) bool { return next[keep[i]].Modified > next[keep[j]].Modified })
+		for _, k := range keep[maxModTimes:] {
+			delete(next, k)
+		}
 	}
 	s.modTimes = next
 	if b, err := json.Marshal(next); err == nil {
@@ -167,6 +195,26 @@ func (s *Snapshotter) ForceNext() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.last = []proto.TabRef{}
+}
+
+// sealFitting seals a tab, cutting its text until the sealed blob fits the
+// relay's per-blob limit and its JSON fits what readers will decompress.
+func (s *Snapshotter) sealFitting(t proto.Tab, plain []byte) (proto.Tab, []byte, string, []byte, error) {
+	for {
+		id := proto.BlobID(s.keys, plain)
+		env, err := proto.Seal(s.keys, proto.BlobAAD(id), plain)
+		if err != nil {
+			return t, nil, "", nil, err
+		}
+		if len(env) <= proto.MaxBlobEnvelope && len(plain) <= proto.MaxPlaintext {
+			return t, plain, id, env, nil
+		}
+		ratio := min(float64(proto.MaxBlobEnvelope)/float64(len(env)), float64(proto.MaxPlaintext)/float64(len(plain))) * 0.95
+		t.Text, t.Truncated = truncateUTF8(t.Text, int(float64(len(t.Text))*ratio), true)
+		if plain, err = json.Marshal(t); err != nil {
+			return t, nil, "", nil, err
+		}
+	}
 }
 
 // nextSeq never goes backwards, even if the clock does or snapshots were pruned.

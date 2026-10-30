@@ -24,7 +24,6 @@
     <string name="find">Find in text</string>
     <string name="matches">%1$d matches</string>
     <string name="monospace">Monospace</string>
-    <string name="truncated">This tab is larger than 5 MB; only the beginning is shown.</string>
     <string name="history">History</string>
     <string name="load_more">Load more</string>
     <string name="viewing_copy">Viewing copy from %1$s</string>
@@ -126,5 +125,7 @@
     <string name="more">More options</string>
     <string name="hidden_tabs_hint">Show the tabs you hid again</string>
     <string name="drafts_hint">Your edits, kept on this phone</string>
-    <string name="too_large_to_edit">This tab is larger than 5 MB: only its beginning reaches the phone, so it can\'t be edited here. You can still read and copy it.</string>
+    <string name="too_large_to_edit">This tab has more than 5 million characters: too big to edit comfortably on the phone. You can read and copy it.</string>
+    <string name="truncated_cannot_edit">Only the beginning of this tab reaches the phone (it doesn\'t fit once compressed), so it can\'t be edited here.</string>
+    <string name="truncated">This tab is too large to sync whole; only the beginning is shown.</string>
 </resources>

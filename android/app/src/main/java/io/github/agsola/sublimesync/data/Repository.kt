@@ -23,6 +23,11 @@ import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withTimeoutOrNull
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import kotlinx.serialization.ExperimentalSerializationApi
+import kotlinx.serialization.json.decodeFromStream
+import java.io.ByteArrayInputStream
 import java.util.Base64
 
 enum class Origin { MAC_TAILSCALE, SERVER_LIVE, SERVER_COPY, CACHE }
@@ -46,6 +51,7 @@ data class RepoState(
  * Reads from the Mac (over Tailscale) and the relay in parallel, preferring
  * the Mac when it answers within [macPreferMs]; falls back to the cache.
  */
+@OptIn(ExperimentalSerializationApi::class)
 class Repository(
     private val mac: Source?,
     private val server: Source?,
@@ -56,6 +62,9 @@ class Repository(
     private val _state = MutableStateFlow(RepoState())
     val state: StateFlow<RepoState> = _state.asStateFlow()
     private val refreshLock = Mutex()
+
+    /** Decrypted tabs of the latest snapshot, so live updates don't decrypt big tabs again. */
+    private val decoded = java.util.concurrent.ConcurrentHashMap<String, Tab>()
 
     /** Shows the cached snapshot (if any) before the network answers. */
     suspend fun loadCache() {
@@ -154,7 +163,11 @@ class Repository(
         }
     }
 
-    private suspend fun materialize(snap: SnapshotJson, origin: Origin, src: Source?, historic: Boolean = false): TabsView {
+    // Decompressing and decrypting big tabs must never run on the UI thread.
+    private suspend fun materialize(snap: SnapshotJson, origin: Origin, src: Source?, historic: Boolean = false): TabsView =
+        withContext(Dispatchers.Default) { materializeNow(snap, origin, src, historic) }
+
+    private suspend fun materializeNow(snap: SnapshotJson, origin: Origin, src: Source?, historic: Boolean): TabsView {
         val env = Base64.getDecoder().decode(snap.envelope)
         val manifest = json.decodeFromString<Manifest>(String(Envelope.open(keyring, Envelope.manifestAad(snap.seq), env)))
         require(manifest.seq == snap.seq) { "manifest seq mismatch" }
@@ -164,11 +177,16 @@ class Repository(
                 async { gate.withPermit { loadTab(ref.blob, src) } }
             }.awaitAll()
         }.sortedWith(compareBy({ it.window }, { it.index }))
-        if (!historic) cache.putLatest(snap, manifest.tabs.map { it.blob }.toSet())
+        if (!historic) {
+            val ids = manifest.tabs.map { it.blob }.toSet()
+            cache.putLatest(snap, ids)
+            decoded.keys.retainAll(ids)
+        }
         return TabsView(snap.seq, manifest.created, tabs, origin, historic)
     }
 
     private suspend fun loadTab(id: String, preferred: Source?): Tab {
+        decoded[id]?.let { return it }
         val env = cache.blob(id) ?: run {
             val order = listOfNotNull(preferred, mac, server).distinct()
             var last: Exception? = null
@@ -179,9 +197,19 @@ class Repository(
             }
             (got ?: throw (last ?: NoSourceException())).also { cache.putBlob(id, it) }
         }
-        return json.decodeFromString(String(Envelope.open(keyring, Envelope.blobAad(id), env)))
+        return try {
+            // Parsed straight from the bytes: no intermediate copy of a huge text.
+            json.decodeFromStream<Tab>(ByteArrayInputStream(Envelope.open(keyring, Envelope.blobAad(id), env))).also { decoded[id] = it }
+        } catch (e: OutOfMemoryError) {
+            // Too big for this phone's memory: show the tab without its text instead of crashing.
+            decoded.clear()
+            Tab(id = -id.hashCode().toLong(), title = "⚠", text = TOO_BIG_FOR_PHONE, truncated = true)
+        }
     }
 }
+
+/** Placeholder text for a tab that doesn't fit in the phone's memory. */
+const val TOO_BIG_FOR_PHONE = "This tab is too large for this phone's memory. Open it in Sublime on the Mac."
 
 class NoSourceException : Exception("neither the Mac nor the server could be reached")
 class AuthRejectedException : Exception("the key was rejected; pair again")

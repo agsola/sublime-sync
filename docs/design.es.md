@@ -190,8 +190,13 @@ Prioridad: **leer y copiar sin pensar**.
   seguir leyendo el histórico antiguo. Un segundo móvil escanea el mismo QR.
 - **QR**: se muestra bajo demanda (`syncsublime pair`); no hace falta un solo uso. Clave en el
   Llavero como ítem propio del agente.
-- **Tamaños**: pestañas de hasta 5 MB; las mayores se envían truncadas con aviso visible en la
-  app; buffers binarios se omiten.
+- **Tamaños** (desde la 0.2.1): una pestaña solo se recorta si no cabe en el servidor una vez
+  comprimida y cifrada (16 MB por pestaña), con un tope de seguridad de 32 millones de
+  caracteres leídos de Sublime. Las recortadas muestran un aviso en la app. Medido en un Pixel 10
+  Pro: una pestaña de 32 millones de caracteres abre en ~3,5 s y se desplaza con fluidez; con ~60
+  millones de caracteres abiertos la app usa ~380 MB de sus 512 MB, así que una pestaña que no
+  quepa en memoria muestra un aviso en lugar de cerrar la app. El editor del móvil admite hasta 5
+  millones de caracteres.
 - **Servidor**: script de instalación idempotente + unit systemd + snippet nginx para
   WebSocket. Endpoint `/health`; la app muestra "servidor sin respuesta" si falla.
 - **Android**: minSdk 30 (Android 11), target el último. Biometría con fallback a PIN/patrón del

@@ -273,7 +273,20 @@ func cmdRun() error {
 
 	go up.Run(ctx)
 	go func() {
-		h := pluginHandler{onTabs: ingest(proto.SourcePlugin), inbox: inbox}
+		// Snapshots are ingested in the background (newest wins), so the plugin
+		// never waits for big tabs to be compressed and encrypted.
+		queue := agent.NewLatestQueue()
+		go func() {
+			ingestPlugin := ingest(proto.SourcePlugin)
+			for {
+				tabs, ok := queue.Take(ctx)
+				if !ok {
+					return
+				}
+				ingestPlugin(tabs)
+			}
+		}()
+		h := pluginHandler{onTabs: queue.Put, inbox: inbox, filler: agent.NewTabFiller()}
 		if err := agent.ListenPlugin(ctx, filepath.Join(dir, "agent.sock"), h); err != nil {
 			log.Printf("plugin socket: %v", err)
 			stop()
@@ -355,9 +368,17 @@ func cmdStatus() error {
 type pluginHandler struct {
 	onTabs func([]proto.Tab)
 	inbox  *agent.Inbox
+	filler *agent.TabFiller
 }
 
-func (h pluginHandler) OnTabs(t []proto.Tab) { h.onTabs(t) }
+func (h pluginHandler) OnTabs(t []proto.Tab) bool {
+	full, ok := h.filler.Fill(t)
+	if !ok {
+		return false
+	}
+	h.onTabs(full)
+	return true
+}
 func (h pluginHandler) OnResults(rs []proto.Result) {
 	for _, r := range rs {
 		h.inbox.Complete(r)

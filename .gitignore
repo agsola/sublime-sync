@@ -23,9 +23,13 @@ android/local.properties
 .idea/
 *.iml
 
-# Local Claude Code settings
+# Local Claude Code state (settings, scheduler lock with session id/pid)
 .claude/settings.local.json
+.claude/scheduled_tasks.lock
 
 # Python
 __pycache__/
 *.pyc
+
+# Local planning notes
+docs/plans/

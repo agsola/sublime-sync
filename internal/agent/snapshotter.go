@@ -10,6 +10,7 @@ import (
 	"errors"
 	"sort"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 	"unicode/utf8"
@@ -140,8 +141,12 @@ func (s *Snapshotter) stampModified(tabs []proto.Tab, now time.Time) {
 	// Entries of tabs not in this snapshot are kept (e.g. the session-file
 	// fallback names tabs differently); the map is capped below.
 	next := make(map[string]modTime, len(s.modTimes)+len(tabs))
+	byHash := make(map[string]int64, len(s.modTimes))
 	for k, v := range s.modTimes {
 		next[k] = v
+		if strings.HasPrefix(k, "v:") && v.Modified > byHash[v.Hash] {
+			byHash[v.Hash] = v.Modified
+		}
 	}
 	for i := range tabs {
 		t := &tabs[i]
@@ -151,11 +156,16 @@ func (s *Snapshotter) stampModified(tabs []proto.Tab, now time.Time) {
 		}
 		sum := sha256.Sum256([]byte(t.Text))
 		h := hex.EncodeToString(sum[:16])
-		switch prev, ok := s.modTimes[key]; {
+		prev, ok := s.modTimes[key]
+		switch {
 		case t.Modified > 0 && !t.Dirty:
 			// mtime from disk, as sent by the plugin
 		case ok && prev.Hash == h:
 			t.Modified = prev.Modified
+		case !ok && byHash[h] > 0:
+			// Unsaved tab under a new view id (Sublime restored it after a
+			// restart): same text, so it keeps the time of its previous id.
+			t.Modified = byHash[h]
 		default:
 			t.Modified = now.UnixMilli()
 		}

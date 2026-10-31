@@ -218,3 +218,27 @@ func TestModifiedSurvivesSessionFallback(t *testing.T) {
 		t.Fatalf("modified reset to %d", back[0].Modified)
 	}
 }
+
+func TestModifiedSurvivesNewViewIDs(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "a.db")
+	k := testKeys(t)
+	st := openStore(t, path)
+	s := NewSnapshotter(st, k, nil)
+	t0 := time.Date(2026, 10, 30, 10, 0, 0, 0, time.UTC)
+	s.Ingest(tabs("a", "b", "c"), proto.SourcePlugin, t0)
+	st.Close()
+
+	// After a reboot Sublime restores the unsaved tabs under new view ids,
+	// in another order.
+	s2 := NewSnapshotter(openStore(t, path), k, nil)
+	got := tabs("c", "a", "b")
+	for i := range got {
+		got[i].ID += 100
+	}
+	s2.stampModified(got, t0.Add(24*time.Hour))
+	for i, tb := range got {
+		if tb.Modified != t0.UnixMilli() {
+			t.Fatalf("tab %d got %d, want the original time", i, tb.Modified)
+		}
+	}
+}
